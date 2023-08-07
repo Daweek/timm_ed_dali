@@ -11,6 +11,7 @@
 /render_engines/fdb/bake_db
 /render_engines/fdb/csv
 
-/render_engines/fdb/ed_fractal2d/build
-/render_engines/fdb/ed_fractal2d/data
+/render_engines/fdb/ed_fractal2d
+# /render_engines/fdb/ed_fractal2d/build
+# /render_engines/fdb/ed_fractal2d/data
 
