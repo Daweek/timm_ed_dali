@@ -2,7 +2,6 @@
 /checkpoint
 /datasets
 /output
-/render_engines
 /wandb
 /render_engines/fdb/bake_db
 /render_engines/fdb/csv
