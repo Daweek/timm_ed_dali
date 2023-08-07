@@ -1,0 +1,6 @@
+/.python-version
+/checkpoint
+/datasets
+/output
+/render_engines
+/wandb
