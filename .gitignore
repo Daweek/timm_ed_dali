@@ -1,5 +1,5 @@
-*__pycache__
-
+*.[__pycache__]
+# *.[tar]
 /.python-version
 
 /checkpoint
@@ -9,7 +9,8 @@
 
 
 /render_engines/fdb/bake_db
-/render_engines/fdb/csv
+/render_engines/fdb/csv/large
+/render_engines/fdb/csv/data1k_fromPython
 
 /render_engines/fdb/ed_fractal2d
 # /render_engines/fdb/ed_fractal2d/build
