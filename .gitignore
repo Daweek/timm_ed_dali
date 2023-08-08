@@ -12,7 +12,6 @@
 /render_engines/fdb/csv/large
 /render_engines/fdb/csv/data1k_fromPython
 
-/render_engines/fdb/ed_fractal2d
-# /render_engines/fdb/ed_fractal2d/build
-# /render_engines/fdb/ed_fractal2d/data
+/render_engines/fdb/ed_fractal2d_cpu/build
+/render_engines/fdb/ed_fractal2d_cpu/data
 
