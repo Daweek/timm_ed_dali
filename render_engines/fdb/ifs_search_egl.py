@@ -62,11 +62,11 @@ def main():
     save_dir = args.save_dir
 
     # Check and create directories
-    img_dir = os.path.join(args.save_dir, 'rate' + str(args.rate) + '_category' + str(args.category))
+    img_dir = os.path.join(args.save_dir, 'rate' + str(args.rate) + '_category' + str(args.category)+'_points'+str(args.numof_point))
     if os.path.exists(img_dir) == False:
         os.makedirs(img_dir)
 
-    cat_dir = os.path.join(args.save_dir, 'csv_rate' + str(args.rate) + '_category' + str(args.category))
+    cat_dir = os.path.join(args.save_dir, 'csv_rate' + str(args.rate) + '_category' + str(args.category)+'_points'+str(args.numof_point))
     if os.path.exists(cat_dir) == False:
         os.makedirs(cat_dir)
 
