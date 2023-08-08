@@ -15,3 +15,5 @@
 /render_engines/fdb/ed_fractal2d_cpu/build
 /render_engines/fdb/ed_fractal2d_cpu/data
 
+/render_engines/fdb/csv/searched_params
+
