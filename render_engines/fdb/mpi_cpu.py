@@ -1,6 +1,9 @@
 from ctypes import LittleEndianStructure
+import os
 import sys
-sys.path.insert(1,"/home/acc12930pb/working/transformer/timm_ed_dali/render_engines/fdb/ed_fractal2d/build/lib.linux-x86_64-cpython-311")
+here = os.getcwd
+
+sys.path.insert(1,here+"/ed_fractal2d_cpu/build/lib.linux-x86_64-cpython-311")
 
 from tqdm import tqdm
 # import moderngl as ModernGL
@@ -12,7 +15,7 @@ import math
 # import glm as glm
 import numpy as np
 from torch import BufferDict
-import os
+
 import cv2
 import argparse
 
