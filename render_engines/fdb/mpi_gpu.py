@@ -382,9 +382,9 @@ def main():
         total_time = time.perf_counter() - initial_time
         
         if args.backend == 'glfw':
-            print0(colored(" Total time render per class: {} sec, ({:0>4}) {} frm/sec ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'blue'))
+            print0(colored(" Total time render per class: {:.4f} sec, ({:0>4}) {:.4f} frm/sec ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'blue'))
         elif args.backend == 'egl':
-            print0(colored(" Total time render per class: {} sec, ({:0>4}) {} frm/sec  ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'green'))
+            print0(colored(" Total time render per class: {:.4f} sec, ({:0>4}) {:.4f} frm/sec  ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'green'))
         ######### Debug ###########
         # if class_num == 10:
         #     break
@@ -397,7 +397,7 @@ def main():
     if args.backend == 'glfw':
         glfw.terminate()
     fina_experiment_time = time.perf_counter() - initial_experiment_time
-    print0(colored("Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'cyan'))
+    print0(colored("Total experiment time: {:.4f} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'cyan'))
 
     print0("Rendering using GPU-EGL Finished...")
     ctx.finish()

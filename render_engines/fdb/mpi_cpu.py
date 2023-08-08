@@ -1,8 +1,7 @@
 from ctypes import LittleEndianStructure
 import os
 import sys
-here = os.getcwd
-
+here = os.getcwd()
 sys.path.insert(1,here+"/ed_fractal2d_cpu/build/lib.linux-x86_64-cpython-311")
 
 from tqdm import tqdm
@@ -195,7 +194,7 @@ def main():
         # print ('save: '+class_str)        
         class_num += 1
         total_time = time.perf_counter() - initial_time
-        print0(colored(" Total time render per class: {} sec, ({:0>4}) {} frm/sec ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'magenta'))
+        print0(colored(" Total time render per class: {:.4f} sec, ({:0>4}) {{:.4f}} frm/sec ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'magenta'))
 
     #glfw.terminate()
     print0(f"rank: {mpirank}, Finished...\n")
@@ -203,7 +202,7 @@ def main():
     comm.Barrier()
     
     fina_experiment_time = time.perf_counter() - t1
-    print0(colored("Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'red'))
+    print0(colored("Total experiment time: {{:.4f}} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'red'))
     
     print0("Rendering using CPU Finished...")
 
