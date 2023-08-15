@@ -268,7 +268,7 @@ parser.add_argument('--output', default='', type=str, metavar='PATH',
                     help='path to output folder (default: none, current dir)')
 parser.add_argument('--experiment', default='', type=str, metavar='NAME',
                     help='name of train experiment, name of sub-folder for output')
-parser.add_argument('--eval-metric', default='top1', type=str, metavar='EVAL_METRIC',
+parser.add_argument('--eval-metric', default='top1_localBS', type=str, metavar='EVAL_METRIC',
                     help='Best metric (default: "top1"')
 parser.add_argument('--log-wandb', action='store_true', default=False,
                     help='log training and validation metrics to wandb')
@@ -582,6 +582,7 @@ def main():
         
         accuracy = np.zeros((num_epochs,))
         accuracy_perBatch = np.zeros((num_epochs,))
+        accuracy_sum = np.zeros((num_epochs,))
         for epoch in range(start_epoch, num_epochs):
             ### Measure time per epoch
             initial_time = time.perf_counter()
@@ -595,8 +596,9 @@ def main():
                 amp_autocast=amp_autocast, loss_scaler=loss_scaler, mixup_fn=mixup_fn)
 
             eval_metrics = validate(model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast)
-            accuracy[epoch] = eval_metrics['top1']
-            accuracy_perBatch [epoch] = eval_metrics['perBatchAcc']
+            accuracy[epoch] = eval_metrics['top1_localBS']
+            accuracy_perBatch [epoch] = eval_metrics['top1_perBS']
+            accuracy_sum [epoch] = eval_metrics['top1_sum']
 
             if lr_scheduler is not None:
                 # step LR for next epoch
@@ -627,7 +629,7 @@ def main():
             
             total_time = time.perf_counter() - initial_time
             if args.rank == 0:
-                _logger.info("\t\tTotal time per epoch: {} seconds, {:0>8} ".format(total_time,str(timedelta(seconds=total_time)))) 
+                _logger.info("  Total time per epoch: {} seconds, {:0>8} ".format(total_time,str(timedelta(seconds=total_time)))) 
 
     except KeyboardInterrupt:
         pass
@@ -636,8 +638,9 @@ def main():
 
     comm.Barrier()
     print0("\n\n")
-    print(colored("Rannk:{}  Max accuracy in the experiment {} in epoch: {}".format(args.rank,accuracy.max(), accuracy.argmax()),'light_grey'))
-    print0(colored("Rannk:{}  Max accuracy in the experiment per Batch {} in epoch: {}".format(args.rank,accuracy_perBatch.max(), accuracy_perBatch.argmax()),'light_red'))
+    print(colored("Rank_iso:{}  Max accuracy in the experiment {} in epoch: {}".format(args.rank,accuracy.max(), accuracy.argmax()),'light_grey'))
+    print0(colored("Rank_seb:{}  Max accuracy in the experiment {} in epoch: {}".format(args.rank,accuracy_sum.max(), accuracy_sum.argmax()),'light_grey'))
+    print0(colored("Rank_swb:{}  Max accuracy in the experiment per Batch {} in epoch: {}".format(args.rank,accuracy_perBatch.max(), accuracy_perBatch.argmax()),'light_red'))
     
     fina_experiment_time = time.perf_counter() - initial_experiment_time
     time.sleep(0.5) # -> Wait for the console to flush
@@ -764,9 +767,9 @@ def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix='')
     top1_m = AverageMeter()
     top5_m = AverageMeter()
     
-    losses_avg = AverageMeter()
-    top1_avg = AverageMeter()
-    top5_avg = AverageMeter()
+    losses_perBS = AverageMeter()
+    top1_perBS = AverageMeter()
+    top5_perBS = AverageMeter()
 
     model.eval()
 
@@ -791,25 +794,25 @@ def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix='')
                 reduced_loss_avg = reduce_tensor_debug(loss.data, args.world_size)
                 acc1_avg = reduce_tensor_debug(acc1, args.world_size)
                 acc5_avg = reduce_tensor_debug(acc5, args.world_size)
-
-            if args.distributed and last_batch :
-                reduced_loss = reduce_tensor_debug(loss.data, args.world_size)
-                acc1 = reduce_tensor_debug(acc1, args.world_size)
-                acc5 = reduce_tensor_debug(acc5, args.world_size)
+            # if args.distributed and last_batch :
+            #     # print0("Last Batch...")
+            #     reduced_loss = reduce_tensor_debug(loss.data, args.world_size)
+            #     acc1 = reduce_tensor_debug(acc1, args.world_size)
+            #     acc5 = reduce_tensor_debug(acc5, args.world_size)
             else:
                 reduced_loss = loss.data
             # reduced_loss = loss.data
 
             torch.cuda.synchronize()
 
-            losses_m.update(reduced_loss.item(), input.size(0))
+            losses_m.update(loss.item(), input.size(0))
             top1_m.update(acc1.item(), output.size(0))
             top5_m.update(acc5.item(), output.size(0))
             
             if args.distributed:
-                losses_avg.update(reduced_loss_avg.item(), input.size(0))
-                top1_avg.update(acc1_avg.item(), output.size(0))
-                top5_avg.update(acc5_avg.item(), output.size(0))
+                losses_perBS.update(reduced_loss_avg.item(), input.size(0))
+                top1_perBS.update(acc1_avg.item(), output.size(0))
+                top5_perBS.update(acc5_avg.item(), output.size(0))
 
             batch_time_m.update(time.time() - end)
             end = time.time()
@@ -823,11 +826,26 @@ def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix='')
                     'Acc@5: {top5.val:>7.4f} ({top5.avg:>7.4f})'.format(
                         log_name, batch_idx, last_idx, batch_time=batch_time_m,
                         loss=losses_m, top1=top1_m, top5=top5_m))
-
-    print(colored(' * Rank:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_m.avg, top5=top5_m.avg),'red'))
+    
+    # reduced_loss = reduce_tensor_debug(loss.data, args.world_size)
+    # acc1 = reduce_tensor_debug(acc1, args.world_size)
+    # acc5 = reduce_tensor_debug(acc5, args.world_size)            
+    
+    # Similar to Nakamuras...
+    sum_tensor = torch.tensor(top1_m.sum).cuda()
+    count_tesor = torch.tensor(float(top1_m.count)).cuda()
+    sum_red = reduce_tensor_debug(sum_tensor, args.world_size)
+    count_red = reduce_tensor_debug(count_tesor, args.world_size)
+    top1_tensor = sum_red/count_red
+    
+    acc1_seb = top1_tensor
+    acc5_seb = 0.0
+                
+    print(colored('* Rank_iso:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_m.avg, top5=top5_m.avg),'red'))
     if args.distributed:
-        print0(colored(' * Rank:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_avg.avg, top5=top5_avg.avg),'blue'))
-    metrics = OrderedDict([('loss', losses_m.avg), ('top1', top1_m.avg), ('top5', top5_m.avg),('perBatchAcc',top1_avg.avg)])
+        print0(colored('- Rank_seb:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=acc1_seb, top5=acc5_seb),'light_magenta'))
+        print0(colored('> Rank_swb:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_perBS.avg, top5=top5_perBS.avg),'blue'))
+    metrics = OrderedDict([('loss', losses_m.avg), ('top1_localBS', top1_m.avg), ('top5', top5_m.avg),('top1_perBS',top1_perBS.avg),('top1_sum',acc1_seb)])
 
     return metrics
 
