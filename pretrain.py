@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" Fine-tune Python Script
+""" Pre-Train Python Script
 Heavily based on the training script provided by timm.
 
 Title: pytorch-image-models
@@ -17,8 +17,9 @@ from collections import OrderedDict
 from contextlib import suppress
 from datetime import datetime
 import shutil
+import math
+import random as pyrandom
 import numpy as np
-
 import torch
 import torch.nn as nn
 import torchvision.utils
@@ -31,41 +32,47 @@ from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy, JsdCro
 from timm.optim import create_optimizer_v2, optimizer_kwargs
 from timm.utils import ApexScaler, NativeScaler
 
+import webdataset as wds
 import torch.distributed as dist
 
-from timm.scheduler.scheduler_factory import create_scheduler
-
-from myloader.loader import create_loader
+from myloader.loader import create_loader, create_transform_webdataset
 from models.factory import create_model, safe_model_name
-# from scheduler.scheduler_factory import create_scheduler
+from scheduler.scheduler_factory import create_scheduler
 from utils.summary import original_update_summary
-from termcolor import colored
 
 from nvidia.dali.plugin.pytorch import DALIClassificationIterator, LastBatchPolicy
-from dali.pipe_finetune import create_dali_pipeline_Aug, create_dali_pipeline_No_Aug
+from dali.pipe_train import create_dali_pipeline_TrainAug
+
+from termcolor import colored
+# from oneInstance import OneInstance_Imnet
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
 mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
+# from oneInstance import OneInstance_Imnet
 
-def print0(message):
+def seed_worker(rank):
+    worker_seed = torch.initial_seed() + rank
+    np.random.seed(worker_seed)
+    pyrandom.seed(worker_seed)
+    
+def seed_worker_fix(seed=42, rank=0):
+    torch.manual_seed(seed + rank)
+    np.random.seed(seed + rank)
+    pyrandom.seed(seed + rank)
+
+def print0(*args):
     if dist.is_initialized():
         if dist.get_rank() == 0:
-            print(message, flush=True)
+            print(*args, flush=True)
     else:
-        print(message, flush=True)
+        print(*args, flush=True)
 
 
-def reduce_tensor_debug(tensor, n):
-    rt = tensor.clone()
-    dist.all_reduce(rt, op=dist.ReduceOp.SUM)
-    rt /= n
-    # print0(colored("Reducing tensors...","cyan"))
-    return rt
-        
 try:
     from apex import amp
     from apex.parallel import DistributedDataParallel as ApexDDP
+
     has_apex = True
 except ImportError:
     has_apex = False
@@ -79,19 +86,21 @@ except AttributeError:
 
 try:
     import wandb
+
     has_wandb = True
-except ImportError: 
+except ImportError:
     has_wandb = False
 
 torch.backends.cudnn.benchmark = True
+# torch.use_deterministic_algorithms(True) -> Does not work...
 _logger = logging.getLogger('train')
 
 
-parser = argparse.ArgumentParser(description='FineTuning')
+parser = argparse.ArgumentParser(description='PreTraining')
 
 # Dataset / Model parameters
 parser.add_argument('data_dir', metavar='DIR',
-                    help='path to dataset')
+                    help='path to dataset, do not used when using WebDataSet')
 parser.add_argument('--dataset', '-d', metavar='NAME', default='',
                     help='dataset type (default: ImageFolder/ImageTar if empty)')
 parser.add_argument('--train-split', metavar='NAME', default='train',
@@ -102,8 +111,6 @@ parser.add_argument('--model', default='deit_tiny_patch16_224', type=str, metava
                     help='Name of model to train (default: deit_tiny_patch16_224)')
 parser.add_argument('--pretrained', action='store_true', default=False,
                     help='Start with pretrained version of specified network (if avail)')
-parser.add_argument('--pretrained-path', default='', type=str, metavar='PATH',
-                    help='Load model from local pretrained checkpoint')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='Resume full model and optimizer state from checkpoint (default: none)')
 parser.add_argument('--no-resume-opt', action='store_true', default=False,
@@ -112,10 +119,8 @@ parser.add_argument('--num-classes', type=int, default=None, metavar='N',
                     help='number of label classes (Model default if None)')
 parser.add_argument('--img-size', type=int, default=None, metavar='N',
                     help='Image patch size (default: None => model default)')
-parser.add_argument('--input-size', default=None, nargs=3, type=int, metavar='N N N', 
+parser.add_argument('--input-size', default=None, nargs=3, type=int, metavar='N N N',
                     help='Input all image dimensions (d h w, e.g. --input-size 3 224 224), uses model default if empty')
-parser.add_argument('--crop-pct', default=None, type=float, metavar='N', 
-                    help='Input image center crop percent (for validation only)')
 parser.add_argument('--mean', type=float, nargs='+', default=None, metavar='MEAN',
                     help='Override mean pixel value of dataset')
 parser.add_argument('--std', type=float, nargs='+', default=None, metavar='STD',
@@ -124,8 +129,14 @@ parser.add_argument('--interpolation', default='', type=str, metavar='NAME',
                     help='Image resize interpolation type (overrides model)')
 parser.add_argument('-b', '--batch-size', type=int, default=32, metavar='N',
                     help='input batch size for training (default: 32)')
-parser.add_argument('-vb', '--validation-batch-size-multiplier', type=int, default=1, metavar='N',
-                    help='ratio of validation batch size to training batch size (default: 1)')
+
+# Web Datasets
+parser.add_argument('--trainshards', default=None,
+                    help='path/URL for ImageNet shards')
+parser.add_argument('-w', '--webdataset', action='store_true', default=False,
+                    help='Using webdata to create DataSet from .tar files')
+parser.add_argument('--dataset_size', default=None, type=int,
+                    help='Number of Images in the dataset, set to num_classes * 1000 if None')
 
 # Optimizer parameters
 parser.add_argument('--opt', default='sgd', type=str, metavar='OPTIMIZER',
@@ -194,7 +205,7 @@ parser.add_argument('--hflip', type=float, default=0.5,
                     help='Horizontal flip training aug probability')
 parser.add_argument('--vflip', type=float, default=0.,
                     help='Vertical flip training aug probability')
-parser.add_argument('--color-jitter', type=float, default=0.4, metavar='PCT',
+parser.add_argument('--color-jitter', type=float, default=None, metavar='PCT',
                     help='Color jitter factor (default: 0.4)')
 parser.add_argument('--aa', type=str, default=None, metavar='NAME',
                     help='Use AutoAugment policy. "v0" or "original". (default: None)'),
@@ -270,7 +281,7 @@ parser.add_argument('--output', default='', type=str, metavar='PATH',
                     help='path to output folder (default: none, current dir)')
 parser.add_argument('--experiment', default='', type=str, metavar='NAME',
                     help='name of train experiment, name of sub-folder for output')
-parser.add_argument('--eval-metric', default='top1_localBS', type=str, metavar='EVAL_METRIC',
+parser.add_argument('--eval-metric', default='top1', type=str, metavar='EVAL_METRIC',
                     help='Best metric (default: "top1"')
 parser.add_argument('--log-wandb', action='store_true', default=False,
                     help='log training and validation metrics to wandb')
@@ -278,8 +289,17 @@ parser.add_argument('--entity-name', default='daweek', type=str,
                     help='set wandb entity name')
 parser.add_argument('--project-name', default='timmain', type=str,
                     help='set wandb project name')
-parser.add_argument('--group-name', default='finetune', type=str,
+parser.add_argument('--group-name', default='pretrain', type=str,
                     help='set wandb group name')
+parser.add_argument('--pause', type=int, default=None,
+                    help='pause training at the epoch')
+#Wandb related
+parser.add_argument('--resumeid', default='', type=str, help='Provide Wandb ID to resume check point',metavar='N')
+
+## For Imnet-1k, 1-instances per class. 
+parser.add_argument('--imnet-oneinstance', action='store_true', default=False, 
+                    help='set wandb group name')
+
 ## For DALI
 #DALI pipeline
 parser.add_argument('--dali', action='store_true', default=False,
@@ -298,10 +318,6 @@ def _parse_args():
 def main():
     setup_default_logging()
     args, args_text = _parse_args()
-    
-    # Check Color Jitter
-    if args.color_jitter == 0.0:
-        args.color_jitter = None
 
     args.prefetcher = not args.no_prefetcher
     args.distributed = int(os.getenv('OMPI_COMM_WORLD_SIZE', '1')) > 1
@@ -346,6 +362,9 @@ def main():
                         "Install NVIDA apex or upgrade to PyTorch 1.6")
 
     random_seed(args.seed, args.rank)
+    # random_seed(args.seed, rank=0)
+    
+    print("Rank:{}, PyTorch seed: {}".format(args.rank,torch.initial_seed()))
     # If DeiT configuration for scale 
     if args.deit_scale:
         print0("Scaling learning rate according to DeiT Paper....")
@@ -353,13 +372,22 @@ def main():
         args.warmup_lr = args.warmup_lr * args.batch_size * args.world_size / args.deit_scale
         args.min_lr = args.min_lr * args.batch_size * args.world_size / args.deit_scale
 
+
     if args.log_wandb and args.rank == 0:
         if has_wandb:
-            wandb.init(entity=args.entity_name, project=args.project_name, name=args.experiment, group=args.group_name, config=args)
+            if not args.resumeid:
+                init_id = wandb.util.generate_id()
+                print(f"Initial Wandb ID: {init_id} ")
+                wandb.init(entity=args.entity_name, project=args.project_name, name=args.experiment, group=args.group_name, resume="allow", config=args)
+            else:
+                resume_id = args.resumeid
+                print(f"Resumed Wandb ID: {resume_id} ")
+                wandb.init(id=resume_id,resume="auto",entity=args.entity_name, project=args.project_name, name=args.experiment, group=args.group_name, config=args)
+                wandb.config.update(args,allow_val_change=True)
+            
         else:
             _logger.warning("You've requested to log metrics to wandb but package not found. "
                             "Metrics not being logged to wandb, try `pip install wandb`")
-
 
     model = create_model(
         args.model,
@@ -368,8 +396,7 @@ def main():
         drop_rate=args.drop,
         drop_connect_rate=args.drop_connect,  # DEPRECATED, use drop_path
         drop_path_rate=args.drop_path,
-        drop_block_rate=args.drop_block,
-        pretrained_path=args.pretrained_path)
+        drop_block_rate=args.drop_block)
     if args.num_classes is None:
         assert hasattr(model, 'num_classes'), 'Model must have `num_classes` attr if not set on cmd line/config.'
         args.num_classes = model.num_classes  # FIXME handle model default vs config num_classes more elegantly
@@ -393,7 +420,6 @@ def main():
     model.cuda()
 
     optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
-    print0(f'Optimizer: \n{optimizer}\n')
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
     amp_autocast = suppress  # do nothing
@@ -420,7 +446,7 @@ def main():
             optimizer=None if args.no_resume_opt else optimizer,
             loss_scaler=None if args.no_resume_opt else loss_scaler,
             log_info=args.rank == 0)
-    if args.rank == 0:
+        if args.rank == 0:
             _logger.info('resume epoch: {}'.format(resume_epoch))
 
     # setup distributed training
@@ -435,8 +461,84 @@ def main():
                 _logger.info("Using native Torch DistributedDataParallel.")
             model = NativeDDP(model, device_ids=[args.local_rank])  # can use device str in Torch >= 1.1
 
-    # /////////////////////////////////////////////////////////////////////////////////////////////////
-    if args.dali is True:
+    # Choose the DataSet Selector
+    if args.webdataset:
+        print0("\n\n=> Loading DataSet with WebDataset using .tars")
+        collate_fn = None
+        mixup_fn = None
+        mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
+        if mixup_active:
+            mixup_args = dict(
+                mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
+                prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
+                label_smoothing=args.smoothing, num_classes=args.num_classes)
+            if args.prefetcher:
+                assert not num_aug_splits  # collate conflict (need to support deinterleaving in collate mixup)
+                collate_fn = FastCollateMixup(**mixup_args)
+            else:
+                mixup_fn = Mixup(**mixup_args)
+
+        # Transforms from Torchvision
+        # create data loaders w/ augmentation pipeline
+        train_interpolation = args.train_interpolation
+        if args.no_aug or not train_interpolation:
+            train_interpolation = data_config['interpolation']
+        transform_train = create_transform_webdataset(
+            input_size=data_config['input_size'],
+            batch_size=args.batch_size,
+            is_training=True,
+            use_prefetcher=args.prefetcher,
+            no_aug=args.no_aug,
+            re_prob=args.reprob,
+            re_mode=args.remode,
+            re_count=args.recount,
+            re_split=args.resplit,
+            scale=args.scale,
+            ratio=args.ratio,
+            hflip=args.hflip,
+            vflip=args.vflip,
+            color_jitter=args.color_jitter,
+            auto_augment=args.aa,
+            num_aug_splits=num_aug_splits,
+            interpolation=train_interpolation,
+            mean=data_config['mean'],
+            std=data_config['std'],
+            num_workers=args.workers,
+            distributed=args.distributed,
+            collate_fn=collate_fn,
+            pin_memory=args.pin_mem,
+            repeated_aug=args.repeated_aug
+        )
+
+        if args.dataset_size:
+            dataset_size = args.dataset_size
+        elif "_2ki" in args.trainshards:
+            dataset_size = args.num_classes * 2000
+        else:
+            dataset_size = args.num_classes * 1000
+
+        train_dataset = (
+            wds.Dataset(args.trainshards)
+                .shuffle(dataset_size)
+                .decode("pil")
+                .rename(image="jpg;jpeg;JPEG;png", target="cls")
+                .map_dict(image=transform_train)
+                .to_tuple("image", "target")
+        )
+        loader_train = wds.WebLoader(train_dataset, batch_size=None, shuffle=False, num_workers=args.workers)
+        train_dataset = train_dataset.batched(args.batch_size, partial=False)
+
+        number_of_batches = dataset_size // (args.batch_size * args.world_size)
+        print0("dataset_size:{}, batch_size:{}, world_size(Total Devices):{}".format(dataset_size, args.batch_size,
+                                                                                        args.world_size))
+        print0("----> Number of batches to be processed per GPU = {}".format(number_of_batches))
+        loader_train = loader_train.repeat(2).slice(number_of_batches)
+        # This only sets the value returned by the len() function; nothing else uses it,
+        # but some frameworks care about it.
+        loader_train.length = number_of_batches
+    
+    ################################################################## For Dali
+    elif args.dali is True:
         print0(colored("[[[[[[[........Using DALI pipeline.....]]]]]]]","red"))
         collate_fn = None
         mixup_fn = None
@@ -454,8 +556,7 @@ def main():
                 
         if args.dgpu:
             print0(colored(">>>>>>>>>>>>>>  GPU render <<<<<<<<<<<<<","red",attrs=["bold"]))
-            dataset_root = args.data_dir + "/train"
-            print0("Loading from:{}".format(dataset_root))
+            print0("Loading from:{}".format(args.root))
             # t0 = time.perf_counter()
             
             # # local_gpu = rank % torch.cuda.device_count()
@@ -482,10 +583,11 @@ def main():
             # r_name = None
             # r_size = len(eii_gpu)
         else:
-            dataset_root = args.data_dir + "/train"
+            # dataset_root = args.data_dir + "/train"
+            dataset_root = args.data_dir
             print0("Loading from:{}".format(dataset_root))
             t0 = time.perf_counter()
-            pipe = create_dali_pipeline_Aug( 
+            pipe = create_dali_pipeline_TrainAug( 
                                     batch_size=args.batch_size,
                                     num_threads=args.workers,
                                     device_id=args.local_rank,
@@ -494,20 +596,16 @@ def main():
                                     external_render = None,
                                     data_dir=dataset_root,
                                     crop=224,
-                                    size=224,
+                                    size=324,
                                     dali_cpu=False,
                                     shard_id=args.rank,
                                     num_shards=args.world_size,
+                                    is_training=True,
                                     gpu_render=args.dgpu,
                                     args=args,
                                     data_config=data_config,
                                     )
-            # pipe.build()
-                        
-            
-            
-            # pipe.run()
-            # exit(0)
+            pipe.build()
             
             r_name = "Reader_Train"
             r_size = -1
@@ -515,53 +613,84 @@ def main():
         # print(colored("input-size","red"),data_config['input_size'])
         # pipe.build()
         loader_train = DALIClassificationIterator(pipe,size=r_size, reader_name=r_name, last_batch_policy=LastBatchPolicy.DROP,prepare_first_batch=True,auto_reset=True)
-        
-        # if args.rank == 0:
-        #     pipe.save_graph_to_dot_file(filename='pipe.dot',use_colors=True)
-        
         t1 = time.perf_counter()
-        print0("Batches per Rank to be processed TRAIN: {:,} batches, {:,} images per batch".format(len(loader_train), args.batch_size))
-        print0("Time load TRAIN DALI:{} seconds\n".format(t1-t0))
-        ############## For eval
-        dataset_root = args.data_dir + "/val"
-        print0("Loading from:{}".format(dataset_root))
-        t0 = time.perf_counter()
-        pipe_eval = create_dali_pipeline_No_Aug( 
-                                batch_size=args.batch_size,
-                                num_threads=args.workers,
-                                device_id=args.local_rank,
-                                seed = 12 + args.rank,
-                                prefetch_queue_depth = 2,
-                                external_render = None,
-                                data_dir=dataset_root,
-                                crop=224,
-                                size=224,
-                                dali_cpu=False,
-                                shard_id=args.rank,
-                                num_shards=args.world_size,
-                                gpu_render=args.dgpu,
-                                args=args,
-                                data_config=data_config,
-                                )
-        pipe_eval.build()
-        r_name = "Reader_Eval"
-        r_size = -1
+        print0("Batches per Rank to be processed: {:,} batches, {:,} images per batch".format(len(loader_train), args.batch_size))
+        print0("Time load DALI:{} seconds\n".format(t1-t0))
     
-        # print(colored("input-size","red"),data_config['input_size'])
-        # pipe.build()
-        loader_eval = DALIClassificationIterator(pipe_eval,size=r_size, reader_name=r_name, last_batch_policy=LastBatchPolicy.FILL,prepare_first_batch=True,auto_reset=True)
-        t1 = time.perf_counter()
-        print0("Batches per Rank to be processed EVAL: {:,} batches, {:,} images per batch".format(len(loader_eval), args.batch_size))
-        print0("Time load EVAL DALI:{} seconds\n".format(t1-t0))
-       
+    else:
+    #Ask for Imnet 1 instance per class
+        if args.imnet_oneinstance :
+            print0("\n\n=> Loading DataSet with Imnet-1instances per Class")
+            # dataset_train = OneInstance_Imnet(root=args.data_dir)
 
+        else:
+            # create datasets with timm's dataloader
+            dataset_train = create_dataset(
+                args.dataset,
+                root=args.data_dir, split=args.train_split, is_training=True,
+                batch_size=args.batch_size, repeats=args.epoch_repeats)
+
+        # setup mixup / cutmix
+        collate_fn = None
+        mixup_fn = None
+        mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
+        if mixup_active:
+            mixup_args = dict(
+                mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
+                prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
+                label_smoothing=args.smoothing, num_classes=args.num_classes)
+            if args.prefetcher:
+                assert not num_aug_splits  # collate conflict (need to support deinterleaving in collate mixup)
+                collate_fn = FastCollateMixup(**mixup_args)
+            else:
+                mixup_fn = Mixup(**mixup_args)
+
+        # wrap dataset in AugMix helper
+        if num_aug_splits > 1:
+            dataset_train = AugMixDataset(dataset_train, num_splits=num_aug_splits)
+
+        # create data loaders w/ augmentation pipeiine
+        train_interpolation = args.train_interpolation
+        if args.no_aug or not train_interpolation:
+            train_interpolation = data_config['interpolation']
+        loader_train = create_loader(
+            dataset_train,
+            input_size=data_config['input_size'],
+            batch_size=args.batch_size,
+            is_training=True,
+            use_prefetcher=args.prefetcher,
+            no_aug=args.no_aug,
+            re_prob=args.reprob,
+            re_mode=args.remode,
+            re_count=args.recount,
+            re_split=args.resplit,
+            scale=args.scale,
+            ratio=args.ratio,
+            hflip=args.hflip,
+            vflip=args.vflip,
+            color_jitter=args.color_jitter,
+            auto_augment=args.aa,
+            num_aug_splits=num_aug_splits,
+            interpolation=train_interpolation,
+            mean=data_config['mean'],
+            std=data_config['std'],
+            num_workers=args.workers,
+            distributed=args.distributed,
+            collate_fn=collate_fn,
+            pin_memory=args.pin_mem,
+            repeated_aug=args.repeated_aug,
+            worker_init_fn=None,
+            persistent_workers=True,
+        )
+        
+        # Print transformations
+        print0("Train transformations:\n\t {}".format(loader_train.dataset.transform))
     # setup learning rate schedule and starting epoch
     iter_per_epoch = len(loader_train)
-    # lr_scheduler, num_iters = create_scheduler(args, optimizer, len(loader_train))
-    lr_scheduler, num_iters = create_scheduler(args, optimizer)
+    lr_scheduler, num_iters = create_scheduler(args, optimizer, len(loader_train))
     
     print0("Lr_Scheduler: {}".format(vars(lr_scheduler)))
-        
+    
     num_epochs = args.epochs + args.cooldown_epochs
     start_epoch = 0
     if args.start_epoch is not None:
@@ -583,19 +712,18 @@ def main():
     # setup loss function
     if args.jsd:
         assert num_aug_splits > 1  # JSD only valid with aug splits set
-        train_loss_fn = JsdCrossEntropy(num_splits=num_aug_splits, smoothing=args.smoothing).cuda()
         print0('JsdCrossEntropy is used for criterion\n')
+        train_loss_fn = JsdCrossEntropy(num_splits=num_aug_splits, smoothing=args.smoothing).cuda()
     elif mixup_active:
-        # smoothing is handled with mixup target transform
-        train_loss_fn = SoftTargetCrossEntropy().cuda()
         print0('SoftTargetCrossEntropy is used for criterion\n')
+        # smoothing is handled with mixup target transform
+        train_loss_fn = SoftTargetCrossEntropy()
     elif args.smoothing:
-        train_loss_fn = LabelSmoothingCrossEntropy(smoothing=args.smoothing).cuda()
         print0('LabelSmoothingCrossEntropy is used for criterion\n')
+        train_loss_fn = LabelSmoothingCrossEntropy(smoothing=args.smoothing).cuda()
     else:
-        train_loss_fn = nn.CrossEntropyLoss().cuda()
         print0('CrossEntropy is used for criterion\n')
-    validate_loss_fn = nn.CrossEntropyLoss().cuda()
+        train_loss_fn = nn.CrossEntropyLoss().cuda()
 
     # setup checkpoint saver and eval metric tracking
     eval_metric = args.eval_metric
@@ -613,7 +741,7 @@ def main():
                 safe_model_name(args.model),
                 str(data_config['input_size'][-1])
             ])
-            
+        
         if args.output is not '':
         
             output_dir = get_outdir(args.output if args.output else './output/train', exp_name)
@@ -625,17 +753,15 @@ def main():
                 f.write(args_text)
         else:
             saver = None
+    
 
     try:
         initial_experiment_time = time.perf_counter()
-        
-        accuracy = np.zeros((num_epochs,))
-        accuracy_perBatch = np.zeros((num_epochs,))
         for epoch in range(start_epoch, num_epochs):
             ### Measure time per epoch
             initial_time = time.perf_counter()
 
-            if args.dali is not True :
+            if args.webdataset is not True and args.dali is not True :
                 if args.distributed and hasattr(loader_train.sampler, 'set_epoch'):
                     loader_train.sampler.set_epoch(epoch)
 
@@ -644,25 +770,23 @@ def main():
                 lr_scheduler=lr_scheduler, saver=saver, output_dir=output_dir,
                 amp_autocast=amp_autocast, loss_scaler=loss_scaler, mixup_fn=mixup_fn)
 
-            eval_metrics = validate(model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast)
-            accuracy[epoch] = eval_metrics['top1']
-            accuracy_perBatch [epoch] = eval_metrics['perBatchAcc']
-            
-
             if lr_scheduler is not None:
                 # step LR for next epoch
-                # lr_scheduler.step(epoch + 1, eval_metrics[eval_metric])
-                lr_scheduler.step(epoch + 1)
-                
+                lr_scheduler.step(epoch + 1, train_metrics[eval_metric])
 
             if output_dir is not None and args.rank == 0:
                 original_update_summary(
-                    epoch, train_metrics, eval_metrics, os.path.join(output_dir, 'summary.csv'),
+                    epoch, train_metrics, None, os.path.join(output_dir, 'summary.csv'),
                     write_header=best_metric is None, log_wandb=args.log_wandb and has_wandb)
+
+            # check whether NaN is loss ? or not ?
+            if not math.isfinite(train_metrics[eval_metric]):
+                print("Loss is {}, stopping training".format(train_metrics[eval_metric]))
+                break
 
             if saver is not None:
                 # save proper checkpoint with eval metric
-                save_metric = eval_metrics[eval_metric]
+                save_metric = train_metrics[eval_metric]
                 best_metric, best_epoch = saver.save_checkpoint(epoch, metric=save_metric)
                 if args.interval_saved_epochs is not None and epoch % args.interval_saved_epochs == 0:
                     # only the last {args.checkpoint_hist} checkpoints will be kept
@@ -676,28 +800,26 @@ def main():
                     if os.path.exists(checkpoint_file):
                         shutil.copyfile(checkpoint_file, target_file)
             
+            if args.pause is not None:
+                if epoch - start_epoch + 1 >= args.pause:
+                    break
+            
             total_time = time.perf_counter() - initial_time
             if args.rank == 0:
-                _logger.info("\t\tTotal time per epoch: {} seconds, {:0>4} ".format(total_time,str(timedelta(seconds=total_time)))) 
+                _logger.info("\t\tTotal time per epoch: {} seconds, {:0>8} ".format(total_time,str(timedelta(seconds=total_time))))
+                # _logger.info("\t\t\tTotal time per epoch: {} ".format(total_time)) 
 
-    
     except KeyboardInterrupt:
         pass
     if best_metric is not None:
         _logger.info('*** Best metric: {0} (epoch {1})'.format(best_metric, best_epoch))
-    # else:
-    #     print0(colored('*** Best metric: {0} (epoch {1})'.format(best_metric, best_epoch),'green'))
 
     comm.Barrier()
-    print0("\n")
-    print(colored("Rannk:{}  Max accuracy in the experiment {} in epoch: {}".format(args.rank,accuracy.max(), accuracy.argmax()),'light_grey'))
-   
-    print0(colored("Rannk:{}  Max accuracy in the experiment per Batch {} in epoch: {}".format(args.rank,accuracy_perBatch.max(), accuracy_perBatch.argmax()),'light_red'))
-    
+    print0("\n")    
     fina_experiment_time = time.perf_counter() - initial_experiment_time
     time.sleep(0.5) # -> Wait for the console to flush
         
-    print0(colored("Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'white'))
+    print0(colored("  Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'white'))
 
 def train_one_epoch(
         epoch, model, loader, optimizer, loss_fn, args,
@@ -721,33 +843,42 @@ def train_one_epoch(
     last_idx = len(loader) - 1
     num_updates = epoch * len(loader)
     
+    
     def debug_tensors(im,la):
         print0(colored("\t{} \t{} \t{}".format(im.shape,im.device,im.dtype),"cyan"))
         print0(colored("\t{} \t\t{} \t{}".format(la.shape,la.device,la.dtype),"cyan"))
         # exit(0)
-    
     for batch_idx, data in enumerate(loader):
-        
-        input = data[0]['data']
-        target = data[0]["label"].squeeze(-1).long()
-        
+
+        if args.rank == 0 and batch_idx == 3 and epoch == 0:
+            memory_cost = torch.cuda.memory_allocated(args.rank)
+            print(f'Memory cost before initialize: {memory_cost} ({memory_cost/1024/1024/1024:.01f}GB)')
         last_batch = batch_idx == last_idx
         data_time_m.update(time.time() - end)
+        
+        if args.dali:
+            input = data[0]['data']
+            target = data[0]["label"].squeeze(-1).long()
+        else:
+            input, target = data
+
         if not args.prefetcher:
-            # input, target = input.cuda(), target.cuda()
+            input, target = input.cuda(), target.cuda()
             if mixup_fn is not None:
                 input, target = mixup_fn(input, target)
 
         with amp_autocast():
             output = model(input)
             loss = loss_fn(output, target)
+        if args.rank == 0 and batch_idx == 3 and epoch == 0:
+            memory_cost = torch.cuda.memory_allocated(args.rank)
+            print(f'Memory cost after forward: {memory_cost} ({memory_cost/1024/1024/1024:.01f}GB)')
 
         if not args.distributed:
             losses_m.update(loss.item(), input.size(0))
 
         optimizer.zero_grad()
         if loss_scaler is not None:
-            # We are using this scaler...Here the Backwarsd happens and communication with all models...
             loss_scaler(
                 loss, optimizer,
                 clip_grad=args.clip_grad, clip_mode=args.clip_mode,
@@ -768,11 +899,8 @@ def train_one_epoch(
             lrl = [param_group['lr'] for param_group in optimizer.param_groups]
             lr = sum(lrl) / len(lrl)
 
-            if args.distributed and last_batch:
-                reduced_loss = reduce_tensor_debug(loss.data, args.world_size)
-                losses_m.update(reduced_loss.item(), input.size(0))
-            else:
-                reduced_loss = loss.data
+            if args.distributed:
+                reduced_loss = reduce_tensor(loss.data, args.world_size)
                 losses_m.update(reduced_loss.item(), input.size(0))
 
             if args.rank == 0:
@@ -793,7 +921,6 @@ def train_one_epoch(
                         lr=lr,
                         data_time=data_time_m))
 
-                
                 if args.log_wandb:
                     wandb.log({'iter': num_updates, 'lr': lr})
 
@@ -808,102 +935,16 @@ def train_one_epoch(
                 last_batch or (batch_idx + 1) % args.recovery_interval == 0):
             saver.save_recovery(epoch, batch_idx=batch_idx)
 
-        #### According to Nakamuras script
-        # if lr_scheduler is not None:
-        #     lr_scheduler.step_update(num_updates=num_updates, metric=losses_m.avg)
+        if lr_scheduler is not None:
+            lr_scheduler.step_update(num_updates=num_updates, metric=losses_m.avg)
 
         end = time.time()
         # end for
-    
+
     if hasattr(optimizer, 'sync_lookahead'):
         optimizer.sync_lookahead()
 
-    # if args.log_wandb:
-    #     wandb.log({'iter': epoch, 'lr': lr})
-
     return OrderedDict([('loss', losses_m.avg)])
-
-
-def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix=''):
-    batch_time_m = AverageMeter()
-    losses_m = AverageMeter()
-    top1_m = AverageMeter()
-    top5_m = AverageMeter()
-    
-    losses_avg = AverageMeter()
-    top1_avg = AverageMeter()
-    top5_avg = AverageMeter()
-       
-    model.eval()
-
-    end = time.time()
-    last_idx = len(loader) - 1
-    with torch.no_grad():
-        for batch_idx, data in enumerate(loader):
-            last_batch = batch_idx == last_idx
-            input = data[0]['data']
-            target = data[0]["label"].squeeze(-1).long()
-            
-            
-            # if not args.prefetcher:
-                # input = input.cuda()
-                # target = target.cuda()
-
-            with amp_autocast():
-                output = model(input)
-            if isinstance(output, (tuple, list)):
-                output = output[0]
-            
-            # print(colored("output model: {} ".format(output),'magenta'))
-
-            loss = loss_fn(output, target)
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
-            
-            if args.distributed:
-                reduced_loss_avg = reduce_tensor_debug(loss.data, args.world_size)
-                acc1_avg = reduce_tensor_debug(acc1, args.world_size)
-                acc5_avg = reduce_tensor_debug(acc5, args.world_size)
-
-            if args.distributed and last_batch:
-                # print("Last batch...")
-                reduced_loss = reduce_tensor_debug(loss.data, args.world_size)
-                acc1 = reduce_tensor_debug(acc1, args.world_size)
-                acc5 = reduce_tensor_debug(acc5, args.world_size)
-            else:
-                reduced_loss = loss.data
-            # reduced_loss = loss.data
-
-            torch.cuda.synchronize()
-
-            losses_m.update(reduced_loss.item(), input.size(0))
-            top1_m.update(acc1.item(), output.size(0))
-            top5_m.update(acc5.item(), output.size(0))
-            
-            if args.distributed:
-                losses_avg.update(reduced_loss_avg.item(), input.size(0))
-                top1_avg.update(acc1_avg.item(), output.size(0))
-                top5_avg.update(acc5_avg.item(), output.size(0))
-            
-
-            batch_time_m.update(time.time() - end)
-            end = time.time()
-            if args.rank == 0 and (last_batch or batch_idx % args.log_interval == 0):                
-                log_name = 'Test' + log_suffix
-                _logger.info(
-                    '{0}: [{1:>4d}/{2}]  '
-                    'Time: {batch_time.val:.3f} ({batch_time.avg:.3f})  '
-                    'Loss: {loss.val:>7.4f} ({loss.avg:>6.4f})  '
-                    'Acc@1: {top1.val:>7.4f} ({top1.avg:>7.4f})  '
-                    'Acc@5: {top5.val:>7.4f} ({top5.avg:>7.4f})'.format(
-                        log_name, batch_idx, last_idx, batch_time=batch_time_m,
-                        loss=losses_m, top1=top1_m, top5=top5_m))
-
-    print(colored(' * Rank:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_m.avg, top5=top5_m.avg),'red'))
-    if args.distributed:
-        print0(colored(' * Rank:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_avg.avg, top5=top5_avg.avg),'blue'))
-    metrics = OrderedDict([('loss', losses_m.avg), ('top1', top1_m.avg), ('top5', top5_m.avg),('perBatchAcc',top1_avg.avg)])
-
-    return metrics
 
 
 if __name__ == '__main__':

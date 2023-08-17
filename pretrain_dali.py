@@ -17,9 +17,9 @@ from collections import OrderedDict
 from contextlib import suppress
 from datetime import datetime
 import shutil
-import numpy as np
 import math
-
+import random as pyrandom
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.utils
@@ -38,7 +38,6 @@ import torch.distributed as dist
 from myloader.loader import create_loader, create_transform_webdataset
 from models.factory import create_model, safe_model_name
 from scheduler.scheduler_factory import create_scheduler
-# from timm.scheduler.scheduler_factory import create_scheduler
 from utils.summary import original_update_summary
 
 from nvidia.dali.plugin.pytorch import DALIClassificationIterator, LastBatchPolicy
@@ -351,6 +350,9 @@ def main():
                         "Install NVIDA apex or upgrade to PyTorch 1.6")
 
     random_seed(args.seed, args.rank)
+    # random_seed(args.seed, rank=0)
+    
+    print("Rank:{}, PyTorch seed: {}".format(args.rank,torch.initial_seed()))
     # If DeiT configuration for scale 
     if args.deit_scale:
         print0("Scaling learning rate according to DeiT Paper....")
@@ -395,9 +397,6 @@ def main():
             os.makedirs(args.output, exist_ok=True)
 
     data_config = resolve_data_config(vars(args), model=model, verbose=args.rank == 0)
-    
-    # print("mean:",data_config['mean'])
-    # print("std", data_config['std'])
 
     # setup augmentation batch splits for contrastive loss
     num_aug_splits = 0
@@ -714,7 +713,6 @@ def main():
     saver = None
     output_dir = None
     if args.rank == 0:
-        
         if args.experiment:
             exp_name = args.experiment
         else:
@@ -803,7 +801,7 @@ def main():
     fina_experiment_time = time.perf_counter() - initial_experiment_time
     time.sleep(0.5) # -> Wait for the console to flush
         
-    print0(colored("Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'white'))
+    print0(colored("  Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'white'))
 
 
 def train_one_epoch(

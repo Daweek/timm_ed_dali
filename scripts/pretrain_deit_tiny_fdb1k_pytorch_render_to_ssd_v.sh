@@ -58,8 +58,8 @@ export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MO
 
 # FDB - 1k - Custom
 mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
-python pretrain_pytorch.py ${DATASET} \
-    --model deit_${MODEL}_patch16_224 --experiment pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_0 \
+python pretrain.py ${DATASET} \
+    --model deit_${MODEL}_patch16_224 --experiment pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_OneFile \
     --input-size 3 ${INPUT_SIZE} ${INPUT_SIZE} \
     --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5  --color-jitter 0.4 \
     --hflip 0.5 --vflip 0.5 --scale 0.08 1.0 --ratio 0.75 1.3333 \

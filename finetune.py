@@ -554,7 +554,83 @@ def main():
         print0("Batches per Rank to be processed EVAL: {:,} batches, {:,} images per batch".format(len(loader_eval), args.batch_size))
         print0("Time load EVAL DALI:{} seconds\n".format(t1-t0))
        
+    else:
+        # create the train and eval datasets
+        dataset_train = create_dataset(
+            args.dataset,
+            root=args.data_dir, split=args.train_split, is_training=True,
+            batch_size=args.batch_size, repeats=args.epoch_repeats)
+        dataset_eval = create_dataset(
+            args.dataset, root=args.data_dir, split=args.val_split, is_training=False, batch_size=args.batch_size)
+        # setup mixup / cutmix
+        collate_fn = None
+        mixup_fn = None
+        mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
+        if mixup_active:
+            mixup_args = dict(
+                mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
+                prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
+                label_smoothing=args.smoothing, num_classes=args.num_classes)
+            if args.prefetcher:
+                assert not num_aug_splits  # collate conflict (need to support deinterleaving in collate mixup)
+                collate_fn = FastCollateMixup(**mixup_args)
+            else:
+                mixup_fn = Mixup(**mixup_args)
 
+        # wrap dataset in AugMix helper
+        if num_aug_splits > 1:
+            dataset_train = AugMixDataset(dataset_train, num_splits=num_aug_splits)
+
+        # create data loaders w/ augmentation pipeiine
+        train_interpolation = args.train_interpolation
+        if args.no_aug or not train_interpolation:
+            train_interpolation = data_config['interpolation']
+        loader_train = create_loader(
+            dataset_train,
+            input_size=data_config['input_size'],
+            batch_size=args.batch_size,
+            is_training=True,
+            use_prefetcher=args.prefetcher,
+            no_aug=args.no_aug,
+            re_prob=args.reprob,
+            re_mode=args.remode,
+            re_count=args.recount,
+            re_split=args.resplit,
+            scale=args.scale,
+            ratio=args.ratio,
+            hflip=args.hflip,
+            vflip=args.vflip,
+            color_jitter=args.color_jitter,
+            auto_augment=args.aa,
+            num_aug_splits=num_aug_splits,
+            interpolation=train_interpolation,
+            mean=data_config['mean'],
+            std=data_config['std'],
+            num_workers=args.workers,
+            distributed=args.distributed,
+            collate_fn=collate_fn,
+            pin_memory=args.pin_mem,
+            repeated_aug=args.repeated_aug
+        )
+        # Print transformations
+        print0(colored ("Train transformations:\n\t {}".format(loader_train.dataset.transform),'green'))
+
+        loader_eval = create_loader(
+            dataset_eval,
+            input_size=data_config['input_size'],
+            batch_size=args.validation_batch_size_multiplier * args.batch_size,
+            is_training=False,
+            use_prefetcher=args.prefetcher,
+            interpolation=data_config['interpolation'],
+            mean=data_config['mean'],
+            std=data_config['std'],
+            num_workers=args.workers,
+            distributed=args.distributed,
+            crop_pct=data_config['crop_pct'],
+            pin_memory=args.pin_mem,
+        )
+        # Print transformations
+        print0(colored ("Eval transformations:\n\t {}".format(loader_eval.dataset.transform),'blue'))
     # setup learning rate schedule and starting epoch
     iter_per_epoch = len(loader_train)
     # lr_scheduler, num_iters = create_scheduler(args, optimizer, len(loader_train))
@@ -629,8 +705,10 @@ def main():
     try:
         initial_experiment_time = time.perf_counter()
         
+        
         accuracy = np.zeros((num_epochs,))
         accuracy_perBatch = np.zeros((num_epochs,))
+        accuracy_sum = np.zeros((num_epochs,))
         for epoch in range(start_epoch, num_epochs):
             ### Measure time per epoch
             initial_time = time.perf_counter()
@@ -645,9 +723,9 @@ def main():
                 amp_autocast=amp_autocast, loss_scaler=loss_scaler, mixup_fn=mixup_fn)
 
             eval_metrics = validate(model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast)
-            accuracy[epoch] = eval_metrics['top1']
-            accuracy_perBatch [epoch] = eval_metrics['perBatchAcc']
-            
+            accuracy[epoch] = eval_metrics['top1_localBS']
+            accuracy_perBatch [epoch] = eval_metrics['top1_perBS']
+            accuracy_sum [epoch] = eval_metrics['top1_sum']
 
             if lr_scheduler is not None:
                 # step LR for next epoch
@@ -678,25 +756,22 @@ def main():
             
             total_time = time.perf_counter() - initial_time
             if args.rank == 0:
-                _logger.info("\t\tTotal time per epoch: {} seconds, {:0>4} ".format(total_time,str(timedelta(seconds=total_time)))) 
+                _logger.info("  Total time per epoch: {} seconds, {:0>8} ".format(total_time,str(timedelta(seconds=total_time)))) 
 
-    
     except KeyboardInterrupt:
         pass
     if best_metric is not None:
         _logger.info('*** Best metric: {0} (epoch {1})'.format(best_metric, best_epoch))
-    # else:
-    #     print0(colored('*** Best metric: {0} (epoch {1})'.format(best_metric, best_epoch),'green'))
 
     comm.Barrier()
-    print0("\n")
-    print(colored("Rannk:{}  Max accuracy in the experiment {} in epoch: {}".format(args.rank,accuracy.max(), accuracy.argmax()),'light_grey'))
-   
-    print0(colored("Rannk:{}  Max accuracy in the experiment per Batch {} in epoch: {}".format(args.rank,accuracy_perBatch.max(), accuracy_perBatch.argmax()),'light_red'))
+    print0("\n\n")
+    print(colored("Rank_iso:{}  Max accuracy in the experiment {} in epoch: {}".format(args.rank,accuracy.max(), accuracy.argmax()),'light_grey'))
+    print0(colored("Rank_seb:{}  Max accuracy in the experiment {} in epoch: {}".format(args.rank,accuracy_sum.max(), accuracy_sum.argmax()),'light_grey'))
+    print0(colored("Rank_swb:{}  Max accuracy in the experiment per Batch {} in epoch: {}".format(args.rank,accuracy_perBatch.max(), accuracy_perBatch.argmax()),'light_red'))
     
     fina_experiment_time = time.perf_counter() - initial_experiment_time
     time.sleep(0.5) # -> Wait for the console to flush
-        
+    
     print0(colored("Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'white'))
 
 def train_one_epoch(
@@ -726,15 +801,18 @@ def train_one_epoch(
         print0(colored("\t{} \t\t{} \t{}".format(la.shape,la.device,la.dtype),"cyan"))
         # exit(0)
     
-    for batch_idx, data in enumerate(loader):
-        
-        input = data[0]['data']
-        target = data[0]["label"].squeeze(-1).long()
-        
+    for batch_idx,data in enumerate(loader):
         last_batch = batch_idx == last_idx
         data_time_m.update(time.time() - end)
+        
+        if args.dali:
+            input = data[0]['data']
+            target = data[0]["label"].squeeze(-1).long()
+        else:
+            input, target = data
+        
         if not args.prefetcher:
-            # input, target = input.cuda(), target.cuda()
+            input, target = input.cuda(), target.cuda()
             if mixup_fn is not None:
                 input, target = mixup_fn(input, target)
 
@@ -747,7 +825,6 @@ def train_one_epoch(
 
         optimizer.zero_grad()
         if loss_scaler is not None:
-            # We are using this scaler...Here the Backwarsd happens and communication with all models...
             loss_scaler(
                 loss, optimizer,
                 clip_grad=args.clip_grad, clip_mode=args.clip_mode,
@@ -830,10 +907,10 @@ def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix='')
     top1_m = AverageMeter()
     top5_m = AverageMeter()
     
-    losses_avg = AverageMeter()
-    top1_avg = AverageMeter()
-    top5_avg = AverageMeter()
-       
+    losses_perBS = AverageMeter()
+    top1_perBS = AverageMeter()
+    top5_perBS = AverageMeter()
+
     model.eval()
 
     end = time.time()
@@ -841,49 +918,48 @@ def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix='')
     with torch.no_grad():
         for batch_idx, data in enumerate(loader):
             last_batch = batch_idx == last_idx
-            input = data[0]['data']
-            target = data[0]["label"].squeeze(-1).long()
             
+            if args.dali:
+                input = data[0]['data']
+                target = data[0]["label"].squeeze(-1).long()
+            else:
+                input, target = data
             
-            # if not args.prefetcher:
-                # input = input.cuda()
-                # target = target.cuda()
+            if not args.prefetcher:
+                input = input.cuda()
+                target = target.cuda()
 
             with amp_autocast():
                 output = model(input)
             if isinstance(output, (tuple, list)):
                 output = output[0]
-            
-            # print(colored("output model: {} ".format(output),'magenta'))
 
             loss = loss_fn(output, target)
             acc1, acc5 = accuracy(output, target, topk=(1, 5))
-            
+
             if args.distributed:
                 reduced_loss_avg = reduce_tensor_debug(loss.data, args.world_size)
                 acc1_avg = reduce_tensor_debug(acc1, args.world_size)
                 acc5_avg = reduce_tensor_debug(acc5, args.world_size)
-
-            if args.distributed and last_batch:
-                # print("Last batch...")
-                reduced_loss = reduce_tensor_debug(loss.data, args.world_size)
-                acc1 = reduce_tensor_debug(acc1, args.world_size)
-                acc5 = reduce_tensor_debug(acc5, args.world_size)
+            # if args.distributed and last_batch :
+            #     # print0("Last Batch...")
+            #     reduced_loss = reduce_tensor_debug(loss.data, args.world_size)
+            #     acc1 = reduce_tensor_debug(acc1, args.world_size)
+            #     acc5 = reduce_tensor_debug(acc5, args.world_size)
             else:
                 reduced_loss = loss.data
             # reduced_loss = loss.data
 
             torch.cuda.synchronize()
 
-            losses_m.update(reduced_loss.item(), input.size(0))
+            losses_m.update(loss.item(), input.size(0))
             top1_m.update(acc1.item(), output.size(0))
             top5_m.update(acc5.item(), output.size(0))
             
             if args.distributed:
-                losses_avg.update(reduced_loss_avg.item(), input.size(0))
-                top1_avg.update(acc1_avg.item(), output.size(0))
-                top5_avg.update(acc5_avg.item(), output.size(0))
-            
+                losses_perBS.update(reduced_loss_avg.item(), input.size(0))
+                top1_perBS.update(acc1_avg.item(), output.size(0))
+                top5_perBS.update(acc5_avg.item(), output.size(0))
 
             batch_time_m.update(time.time() - end)
             end = time.time()
@@ -897,11 +973,26 @@ def validate(model, loader, loss_fn, args, amp_autocast=suppress, log_suffix='')
                     'Acc@5: {top5.val:>7.4f} ({top5.avg:>7.4f})'.format(
                         log_name, batch_idx, last_idx, batch_time=batch_time_m,
                         loss=losses_m, top1=top1_m, top5=top5_m))
-
-    print(colored(' * Rank:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_m.avg, top5=top5_m.avg),'red'))
+    
+    # reduced_loss = reduce_tensor_debug(loss.data, args.world_size)
+    # acc1 = reduce_tensor_debug(acc1, args.world_size)
+    # acc5 = reduce_tensor_debug(acc5, args.world_size)            
+    
+    # Similar to Nakamuras...
+    sum_tensor = torch.tensor(top1_m.sum).cuda()
+    count_tesor = torch.tensor(float(top1_m.count)).cuda()
+    sum_red = reduce_tensor_debug(sum_tensor, args.world_size)
+    count_red = reduce_tensor_debug(count_tesor, args.world_size)
+    top1_tensor = sum_red/count_red
+    
+    acc1_seb = top1_tensor
+    acc5_seb = 0.0
+                
+    print(colored('* Rank_iso:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_m.avg, top5=top5_m.avg),'red'))
     if args.distributed:
-        print0(colored(' * Rank:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_avg.avg, top5=top5_avg.avg),'blue'))
-    metrics = OrderedDict([('loss', losses_m.avg), ('top1', top1_m.avg), ('top5', top5_m.avg),('perBatchAcc',top1_avg.avg)])
+        print0(colored('- Rank_seb:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=acc1_seb, top5=acc5_seb),'light_magenta'))
+        print0(colored('> Rank_swb:{rank} Top@1 {top1:.6f} Top@5 {top5:.6f}'.format(rank=args.rank,top1=top1_perBS.avg, top5=top5_perBS.avg),'blue'))
+    metrics = OrderedDict([('loss', losses_m.avg), ('top1_localBS', top1_m.avg), ('top5', top5_m.avg),('top1_perBS',top1_perBS.avg),('top1_sum',acc1_seb)])
 
     return metrics
 

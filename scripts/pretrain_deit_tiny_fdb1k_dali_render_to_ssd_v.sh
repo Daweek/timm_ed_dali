@@ -58,8 +58,8 @@ export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MO
 
 # FDB - 1k - Custom
 mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
-python pretrain_dali.py ${DATASET} --dali \
-    --model deit_${MODEL}_patch16_224 --experiment pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_0 \
+python pretrain.py ${DATASET} --dali \
+    --model deit_${MODEL}_patch16_224 --experiment pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_OneFile \
     --input-size 3 ${INPUT_SIZE} ${INPUT_SIZE} \
     --epochs ${EPOCHS} --opt adamw --lr ${LR} --weight-decay 0.05 --deit-scale 512.0 \
     --sched cosine_iter --min-lr 1.0e-5 --warmup-lr 1e-06 --warmup-epochs 5 --warmup-iter 5000 --cooldown-epochs 0 \
