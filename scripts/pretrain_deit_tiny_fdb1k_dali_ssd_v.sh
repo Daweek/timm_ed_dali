@@ -27,6 +27,7 @@ export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
 
 export MASTER_ADDR=$(/usr/sbin/ip a show dev bond0 | grep inet | cut -d " " -f 6 | cut -d "/" -f 1)
+export MASTER_PORT=2042
 
 export MODEL=tiny
 export LR=1.0e-3
@@ -64,6 +65,8 @@ python pretrain_dali.py /beeond/FractalDB-1000-EGL-GLFW --dali \
     --no-prefetcher --amp \
     --log-wandb \
 
+echo "                   "
+echo "                   "
 echo "Compute Finished..."
 ################################################################
 ##################################

@@ -34,7 +34,7 @@ export DATASET=${LOCALDIR}/fdb1k_${RENDER_HWD}
 cd render_engines/fdb
 echo "Start rendering to local ..."
 # mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu
-mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_gpu.py --save_root /beeond/fdb1k --ngpus-pernode 4
+mpirun --bind-to socket --use-hwthread-cpus -np 80 python mpi_gpu.py --image-res 112 --save_root /beeond/fdb1k --ngpus-pernode 4
 # du -sh ${DATASET}
 cd ../../
 ##################################
@@ -57,9 +57,9 @@ export INPUT_SIZE=224
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 
 # FDB - 1k - Custom
-mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
 python pretrain.py ${DATASET} \
-    --model deit_${MODEL}_patch16_224 --experiment pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_OneFile \
+    --model deit_${MODEL}_patch16_224 --experiment pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_112 \
     --input-size 3 ${INPUT_SIZE} ${INPUT_SIZE} \
     --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5  --color-jitter 0.4 \
     --hflip 0.5 --vflip 0.5 --scale 0.08 1.0 --ratio 0.75 1.3333 \
@@ -67,7 +67,7 @@ python pretrain.py ${DATASET} \
     --sched cosine_iter --min-lr 1.0e-5 --warmup-lr 1e-06 --warmup-epochs 5 --warmup-iter 5000 --cooldown-epochs 0 \
     --aa rand-m9-mstd0.5-inc1  --train-interpolation random \
     --reprob 0.25 --remode pixel \
-    --batch-size ${LOCAL_BATCH_SIZE} -j 16 --pin-mem \
+    --batch-size ${LOCAL_BATCH_SIZE} -j 19 --pin-mem \
     --mixup 0.8 --cutmix 1.0 --drop-path 0.1 \
     --num-classes ${CLS}000 --eval-metric loss \
     --interval-saved-epochs 100 --output ${OUT_DIR} \

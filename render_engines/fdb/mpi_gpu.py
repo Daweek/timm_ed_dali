@@ -46,7 +46,8 @@ mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
 
 
-g_res = 362
+# g_res = 362
+# g_res = 362
 g_components = 3
 g_alignment = 1
 
@@ -93,6 +94,7 @@ parser.add_argument('--load_root', default='./csv/data1k_fromPython/csv_rate0.2_
 parser.add_argument('--save_root', default='./bake_db/test', type = str, help='save png root')
 parser.add_argument('--image_size_x', default=362, type = int, help='image size x')
 parser.add_argument('--image_size_y', default=362, type = int, help='image size y')
+parser.add_argument('--image-res', default=362, type = int, help='image size y')
 parser.add_argument('--pad_size_x', default=6, type = int, help='padding size x')
 parser.add_argument('--pad_size_y', default=6, type = int, help='padding size y')
 parser.add_argument('--iteration', default=200000, type = int, help='iteration')
@@ -110,7 +112,10 @@ def main():
     if not (args.backend == 'glfw' or args.backend == 'egl'):
         print("No available backend.->>>>>>>>>>>>>>> exit(0)")
         exit(0)
-            
+    
+    # Added global relosolution
+    g_res = args.image_res
+    
     # Main variables
     csv_names = os.listdir(args.load_root)
     csv_names.sort()
@@ -216,6 +221,7 @@ def main():
     
     np.random.seed(100)
     print0("\nStart the rendering loop...")
+    print0(colored("Saving at {} x {} ressolution".format(g_res,g_res),"yellow"))
     
     if args.tomemory:
         print0("Not saving the file to disk... only rendering to memory...")

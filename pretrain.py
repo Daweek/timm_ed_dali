@@ -363,8 +363,8 @@ def main():
 
     random_seed(args.seed, args.rank)
     # random_seed(args.seed, rank=0)
+    # print("Rank:{}, PyTorch seed: {}".format(args.rank,torch.initial_seed()))
     
-    print("Rank:{}, PyTorch seed: {}".format(args.rank,torch.initial_seed()))
     # If DeiT configuration for scale 
     if args.deit_scale:
         print0("Scaling learning rate according to DeiT Paper....")
