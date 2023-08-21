@@ -54,12 +54,14 @@ export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
 
+export EXPERIMENT=x112
+
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 
 # FDB - 1k - Custom
 mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
 python pretrain.py ${DATASET} \
-    --model deit_${MODEL}_patch16_224 --experiment pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_112 \
+    --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_${EXPERIMENT} \
     --input-size 3 ${INPUT_SIZE} ${INPUT_SIZE} \
     --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5  --color-jitter 0.4 \
     --hflip 0.5 --vflip 0.5 --scale 0.08 1.0 --ratio 0.75 1.3333 \

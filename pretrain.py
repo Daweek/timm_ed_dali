@@ -684,7 +684,7 @@ def main():
         )
         
         # Print transformations
-        print0("Train transformations:\n\t {}".format(loader_train.dataset.transform))
+        print0(colored ("Train transformations:\n\t {}".format(loader_train.dataset.transform),'green'))
     # setup learning rate schedule and starting epoch
     iter_per_epoch = len(loader_train)
     lr_scheduler, num_iters = create_scheduler(args, optimizer, len(loader_train))
