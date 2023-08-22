@@ -4,7 +4,7 @@
 #$ -l h_rt=10:00:00
 #$ -j y
 #$ -o output/$JOB_ID_finetune_pytorch_deit_tiny_cifar100.out
-#$ -l USE_BEEOND=1
+
 cat $JOB_SCRIPT
 echo "..................................................................................................."
 echo "JOB ID: ---- >>>>>>   $JOB_ID"
@@ -44,7 +44,8 @@ export PRE_BATCH=512
 export BATCH_SIZE=768
 export LOCAL_BATCH_SIZE=96
 
-export EXPERIMENT=112
+export EXPERIMENT=x112
+export SSD=/local/${JOB_ID}.1.gpu
 
 # For Timm scripts...
 export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${EXPERIMENT}/last.pth.tar
@@ -56,12 +57,12 @@ export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MO
 
 
 echo "Copy and Untar..."
-time tar -xf /home/acc12930pb/datasets/cifar100.tar -C /beeond
-ls /beeond
+mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 2 time tar -xf /home/acc12930pb/datasets/cifar100.tar -C ${SSD}
+readlink -f ${SSD}
 echo "Finished copying and Untar..."
 
-mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
-python finetune.py /beeond/cifar100 \
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
+python finetune.py ${SSD}/cifar100 \
     --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_fine_deit_${PIPE}_${MODEL}_cifar100_from_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_epochs${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${EXPERIMENT} \
     --input-size 3 224 224 --num-classes 100  \
     --batch-size ${LOCAL_BATCH_SIZE} --opt sgd --lr 0.01 --weight-decay 0.0001 --deit-scale 512.0 \
@@ -72,7 +73,7 @@ python finetune.py /beeond/cifar100 \
     --reprob 0.25 --recount 1 --remode pixel \
     --aa rand-m9-mstd0.5-inc1 \
     --mixup 0.8 --cutmix 1.0 --mixup-prob 1.0 --mixup-switch-prob 0.5 --mixup-mode batch --smoothing 0.1 --drop-path 0.1 \
-    -j 16 --no-prefetcher \
+    -j 19 --no-prefetcher \
     --output ${OUT_DIR} \
     --amp \
     --log-wandb \

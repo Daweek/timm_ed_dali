@@ -277,7 +277,8 @@ def create_loader(
         pin_memory=pin_memory,
         drop_last=is_training,
         worker_init_fn=worker_init_fn,
-        persistent_workers=persistent_workers)
+        persistent_workers=persistent_workers,
+        prefetch_factor=4)
     try:
         loader = loader_class(dataset, **loader_args)
     except TypeError as e:

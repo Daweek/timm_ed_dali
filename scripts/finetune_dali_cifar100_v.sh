@@ -4,7 +4,7 @@
 #$ -l h_rt=10:00:00
 #$ -j y
 #$ -o output/$JOB_ID_finetune_pytorch_deit_tiny_cifar100.out
-#$ -l USE_BEEOND=1
+
 cat $JOB_SCRIPT
 cat dali/pipe_finetune.py
 echo "..................................................................................................."
@@ -33,7 +33,6 @@ export NGPUS=8
 export NUM_PROC=4
 export PIPE=Dali
 
-
 # ========= For experiment and pre-train
 export RENDER_HWD=egl
 export PRE_STORAGE=ssd
@@ -45,29 +44,32 @@ export PRE_BATCH=512
 export BATCH_SIZE=768
 export LOCAL_BATCH_SIZE=96
 
-# For Timm scripts...
-export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_OneFile/last.pth.tar
+export SSD=/local/${JOB_ID}.1.gpu
+export EXPERIMENT=GLFW
 
 # For Timm scripts...
-# export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/checkpoint/tiny/fdb1k/pre_training/pretrain_deit_tiny_fdb1k_lr1.0e-3_epochs300_bs512_ssd_362x_GLFW3090/last.pth.tar  #----->>>>> best so far... 86.72
+# export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${EXPERIMENT}/last.pth.tar
+
+# For Timm scripts...
+export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/checkpoint/tiny/fdb1k/pre_training/pretrain_deit_tiny_fdb1k_lr1.0e-3_epochs300_bs512_ssd_362x_GLFW3090/last.pth.tar  #----->>>>> best so far... 86.72
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/fine_tuning
 
 
 echo "Copy and Untar..."
-time tar -xf /home/acc12930pb/datasets/cifar100.tar -C /beeond
-ls /beeond
+mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 2 time tar -xf /home/acc12930pb/datasets/cifar100.tar -C ${SSD}
+readlink -f ${SSD}
 echo "Finished copying and Untar..."
 
-mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
-python finetune.py /beeond/cifar100 --dali \
-    --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_fine_deit_${PIPE}_${MODEL}_cifar100_from_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_epochs${PRE_EPOCHS}_bs${PRE_BATCH}_OneFile \
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
+python finetune.py ${SSD}/cifar100 --dali \
+    --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_fine_deit_${PIPE}_${MODEL}_cifar100_from_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_epochs${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${EXPERIMENT} \
     --input-size 3 224 224 --num-classes 100  \
     --batch-size ${LOCAL_BATCH_SIZE} --opt sgd --lr 0.01 --weight-decay 0.0001 --deit-scale 512.0 \
     --sched cosine  --epochs 1000  --lr-cycle-mul 1.0 --min-lr 1e-05 --decay-rate 0.1 --warmup-lr 1e-06 --warmup-epochs 10  --lr-cycle-limit 1 --cooldown-epochs 0 \
     --scale 0.08 1.0 --ratio 0.75 1.3333 \
     --mixup 0.8 --cutmix 1.0 --mixup-prob 1.0 --mixup-switch-prob 0.5 --mixup-mode batch --smoothing 0.1 --drop-path 0.1 \
-    -j 16 --no-prefetcher \
+    -j 19 --no-prefetcher \
     --output ${OUT_DIR} \
     --amp \
     --log-wandb \
