@@ -1,7 +1,7 @@
 #!/bin/bash
 #$ -cwd
-#$ -l rt_F=8
-#$ -l h_rt=20:00:00
+#$ -l rt_F=32
+#$ -l h_rt=15:00:00
 #$ -j y
 #$ -o output/$JOB_ID_pretrain_deit_base_fdb21k_rendertossd.out
 #$ -N pretrain_vit_tiny_patch16_224
@@ -35,14 +35,14 @@ export DATASET=${LOCALDIR}/fdb21k_${RENDER_HWD}
 cd render_engines/fdb
 echo "Start rendering to local ..."
 # mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu
-mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 640 python mpi_gpu.py --ngpus-pernode 4 --image-res 362 --save_root /beeond/fdb21k --load_root csv/large/csv_rate0.2_category21000
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 2560 python mpi_gpu.py --ngpus-pernode 4 --image-res 362 --save_root /beeond/fdb21k --load_root csv/large/csv_rate0.2_category21000
 # du -sh ${DATASET}
 cd ../../
 ##################################
 
 export MASTER_ADDR=$(/usr/sbin/ip a show dev bond0 | grep inet | cut -d " " -f 6 | cut -d "/" -f 1|head -n 1)
 export MASTER_PORT=2042
-export NGPUS=32
+export NGPUS=128
 export NUM_PROC=4
 export PIPE=Dali
 export STORAGE=ssd
@@ -50,7 +50,7 @@ export STORAGE=ssd
 export MODEL=base
 export LR=1.0e-3
 export CLS=21
-export EPOCHS=300
+export EPOCHS=90
 export LOCAL_BATCH_SIZE=64
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
