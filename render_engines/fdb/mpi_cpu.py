@@ -61,6 +61,7 @@ parser.add_argument('--csv', default='./csv/data1k_fromPython/csv_rate0.2_catego
 parser.add_argument('--save_root', default='./bake_db/testCPU', type = str, help='save png root')
 parser.add_argument('--image_size_x', default=362, type = int, help='image size x')
 parser.add_argument('--image_size_y', default=362, type = int, help='image size y')
+parser.add_argument('--image-res', default=362, type = int, help='image size y')
 parser.add_argument('--pad_size_x', default=6, type = int, help='padding size x')
 parser.add_argument('--pad_size_y', default=6, type = int, help='padding size y')
 parser.add_argument('--iteration', default=200000, type = int, help='iteration')
@@ -69,6 +70,7 @@ parser.add_argument('--weight_csv', default='./weights/weights_0.4.csv', type = 
 parser.add_argument('--instance', default=10, type = int, help='#instance, 10 => 1000 instance, 100 => 10,000 instance per category')
 parser.add_argument('--checkpoint', default=0, type = int, help='From last class that was not created')
 parser.add_argument('--pmode', default=0, type = int, help='Patch Mode...')
+parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='Do not save the image but only retain to memory')
 
 	
 def main():
@@ -91,7 +93,6 @@ def main():
     csv_names = csv_names[start_list:end_list]
     print0(f"rank: {mpirank}, csv_names:{csv_names}]\n\n")
 
-        
     comm.Barrier()
     if mpirank == 0:
         if not os.path.exists(os.path.join(args.save_root)):
@@ -105,8 +106,8 @@ def main():
 
     ####################### Initialize the library
     # Configure CPU render
-    width:int = args.image_size_x
-    height:int = args.image_size_y
+    width:int = args.image_res
+    height:int = args.image_res
     npts:int = args.iteration
     patch_mode:int = args.pmode
     pointgen_seed:int = 100
@@ -119,9 +120,13 @@ def main():
     
     patchgen_rng:np.random.Generator = None
     patchgen_rng = np.random.default_rng()
-    
-    
     print0("\nStart the rendering loop...")
+    print0(colored("Saving at {} x {} ressolution".format(args.image_res,args.image_res),'green'))
+    
+    if args.tomemory:
+        print0(colored('Not saving the file to disk... only rendering to memory..','blue', 'on_black',['bold', 'blink']))
+    else:
+        print0("Saving the images to {}".format(args.save_root))    
     t  =  t1 = time.perf_counter()
 
     if args.checkpoint != 0:
@@ -184,8 +189,11 @@ def main():
                     out_data = _imgs[0].permute(2,0,1) #chw
                     out_data = transforms.ToPILImage()(out_data.squeeze_(0))
 
+                    if args.tomemory:
+                            pass  
+                    else:
                     # print(out_data)
-                    out_data.save(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip" + str(trans_type) + ".png"),"PNG")
+                        out_data.save(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip" + str(trans_type) + ".png"),"PNG")
                     
 
             fractal_weight += 1
@@ -194,7 +202,7 @@ def main():
         # print ('save: '+class_str)        
         class_num += 1
         total_time = time.perf_counter() - initial_time
-        print0(colored(" Total time render per class: {:.4f} sec, ({:0>4}) {{:.4f}} frm/sec ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'magenta'))
+        print0(colored(" Total time render per class: {:.4f} sec, ({:0>4}) {:.4f} frm/sec ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'magenta'))
 
     #glfw.terminate()
     print0(f"rank: {mpirank}, Finished...\n")
@@ -202,7 +210,7 @@ def main():
     comm.Barrier()
     
     fina_experiment_time = time.perf_counter() - t1
-    print0(colored("Total experiment time: {{:.4f}} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'red'))
+    print0(colored("\n\n\tTotal experiment time: {:.4f} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'red'))
     
     print0("Rendering using CPU Finished...")
 

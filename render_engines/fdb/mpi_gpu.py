@@ -221,10 +221,10 @@ def main():
     
     np.random.seed(100)
     print0("\nStart the rendering loop...")
-    print0(colored("Saving at {} x {} ressolution".format(g_res,g_res),"yellow"))
+    print0(colored("Saving at {} x {} ressolution".format(g_res,g_res),'green'))
     
     if args.tomemory:
-        print0("Not saving the file to disk... only rendering to memory...")
+        print0(colored('Not saving the file to disk... only rendering to memory..','blue', 'on_black',['bold', 'blink']))
     else:
         print0("Saving the images to {}".format(args.save_root))    
     
@@ -403,7 +403,7 @@ def main():
     if args.backend == 'glfw':
         glfw.terminate()
     fina_experiment_time = time.perf_counter() - initial_experiment_time
-    print0(colored("Total experiment time: {:.4f} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'cyan'))
+    print0(colored("\n\n\tTotal experiment time: {:.4f} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'cyan'))
 
     print0("Rendering using GPU-EGL Finished...")
     ctx.finish()
