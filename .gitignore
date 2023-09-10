@@ -7,6 +7,13 @@
 /output
 /wandb
 
+/benchmarks/data_wds_362
+/benchmarks/shaders
+/benchmarks/tars
+/benchmarks/weights
+/benchmarks/ssd
+
+
 
 /render_engines/fdb/bake_db
 /render_engines/fdb/csv/large

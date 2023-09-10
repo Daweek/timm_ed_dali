@@ -139,6 +139,9 @@ def main():
         count = 0
         class_num = 0
     
+    
+    dtset_tensor = torch.FloatTensor()
+    
     for csv_name in tqdm(csv_names):
         initial_time = time.perf_counter()
         name, ext = os.path.splitext(csv_name)
@@ -163,7 +166,6 @@ def main():
             
             param_size = params.shape[0]
             
-            
             for i in range(param_size):
                 params[i][0] = params[i][0] * weight[0]
                 params[i][1] = params[i][1] * weight[1]
@@ -186,16 +188,16 @@ def main():
                     _imgs:torch.LongTensor = None
                     _imgs= fr.render(pts,width,height,patch_mode, flip_flg, pointgen_seed)
                     # time.sleep(1)
-                    out_data = _imgs[0].permute(2,0,1) #chw
-                    out_data = transforms.ToPILImage()(out_data.squeeze_(0))
+                    out_data_tensor = _imgs[0].permute(2,0,1) #chw
+                    out_data = transforms.ToPILImage()(out_data_tensor.squeeze_(0))
 
                     if args.tomemory:
-                            pass  
+                        dtset_tensor = torch.cat((dtset_tensor,out_data_tensor),1)
+                        # pass  
                     else:
                     # print(out_data)
                         out_data.save(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip" + str(trans_type) + ".png"),"PNG")
                     
-
             fractal_weight += 1
 
         class_str =  '%05d' % class_num
