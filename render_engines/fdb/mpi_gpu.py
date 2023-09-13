@@ -250,6 +250,9 @@ def main():
     
     count = 0
     class_num = 0
+    
+    
+    dataset = []
     for csv_name in tqdm(csv_names):
         initial_time = time.perf_counter()
         name, ext = os.path.splitext(csv_name)
@@ -405,7 +408,8 @@ def main():
                         if args.tomemory:
                             im = Image.frombytes('RGB', (g_res, g_res), data)
                             membuf = BytesIO()
-                            im.save(membuf, format="png") 
+                            im.save(membuf, format="png")
+                            dataset.append(membuf) 
                             # print(membuf.getvalue())
                             # print(colored('\nTotal amount of bytes: {:,}'.format(membuf.__sizeof__()),'blue'))
                             # exit(0)
@@ -435,6 +439,15 @@ def main():
     print0(f"rank: {mpirank}, Finished...\n")
     print0(f"Waiting for the rest of the ranks...")
     comm.Barrier()
+    
+    print0('\nInformation gater from memory..')
+    added:int = 0
+    for i, x in enumerate(dataset):
+        added += x.__sizeof__()
+        # print0("total images:{} bytes {:,}".format(i+1,added))
+    print0('Total bytes readed from rank 0 {:,}'.format(added))
+    
+    
     if args.backend == 'glfw':
         glfw.terminate()
     fina_experiment_time = time.perf_counter() - initial_experiment_time

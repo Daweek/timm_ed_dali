@@ -43,7 +43,9 @@ from termcolor import colored
 
 from nvidia.dali.plugin.pytorch import DALIClassificationIterator, LastBatchPolicy
 from dali.pipe_finetune import create_dali_pipeline_Aug, create_dali_pipeline_No_Aug
+
 from mpi4py import MPI
+
 comm = MPI.COMM_WORLD
 mpirank = comm.Get_rank()
 mpisize = comm.Get_size()

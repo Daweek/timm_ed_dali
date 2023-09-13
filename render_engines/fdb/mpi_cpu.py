@@ -28,6 +28,7 @@ from typing import List
 from torchvision import transforms
 import matplotlib.pyplot as plt
 
+
 from mpi4py import MPI
 
 from io import BytesIO
@@ -35,6 +36,7 @@ from io import BytesIO
 comm = MPI.COMM_WORLD
 mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
+
 
 def print0(message):
     if mpisize > 1:
@@ -231,6 +233,22 @@ def main():
     print0(f"rank: {mpirank}, Finished...\n")
     print0(f"Waiting for the rest of the ranks...")
     comm.Barrier()
+    
+    
+    print0('\nInformation gater from memory..')
+    added:int = 0
+    for i, x in enumerate(dataset):
+        added += x.__sizeof__()
+        # print0("total images:{} bytes {:,}".format(i+1,added))
+    print0('Total bytes readed from rank 0 {:,}'.format(added))
+    
+    # we are gonna communicate all the ranks and their added bytes...
+    
+    
+    memory_t = torch.tensor(added)
+    gather_mem = MPI.COMM_WORLD.reduce(memory_t, op=MPI.SUM,root=0)
+    if mpirank == 0:
+        print0('Total amount of data gather from MPI ranks on png dataset: {:,}'.format(gather_mem))
     
     
     
