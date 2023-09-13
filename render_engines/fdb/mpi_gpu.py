@@ -45,6 +45,8 @@ comm = MPI.COMM_WORLD
 mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
 
+from io import BytesIO
+
 
 # g_res = 362
 # g_res = 362
@@ -101,6 +103,7 @@ parser.add_argument('--iteration', default=200000, type = int, help='iteration')
 parser.add_argument('--draw_type', default='patch_gray', type = str, help='{point, patch}_{gray, color}')
 parser.add_argument('--weight_csv', default='./weights/weights_0.4.csv', type = str, help='weight parameter')
 parser.add_argument('--instance', default=10, type = int, help='#instance, 10 => 1000 instance, 100 => 10,000 instance per category')
+parser.add_argument('--rotation', default=4, type = int, help='Flip per category')
 parser.add_argument('-g','--ngpus-pernode', default=1, type = int, help='Num of GPUs in the node')
 parser.add_argument('--backend', default='egl', type = str, help='{GLFW, EGL}')
 parser.add_argument('-d', '--debug', action='store_true',default=False,help='Check sanity for all the images... pixel count')
@@ -108,6 +111,12 @@ parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='
 
 def main():
     args = parser.parse_args()
+    
+    # Set the seeds
+    np.random.seed(2041)
+    random.seed(2041)
+
+    
     # Parse the backend
     if not (args.backend == 'glfw' or args.backend == 'egl'):
         print("No available backend.->>>>>>>>>>>>>>> exit(0)")
@@ -219,7 +228,7 @@ def main():
             (color,'2f','pixcolor'),
             ])
     
-    np.random.seed(100)
+    
     print0("\nStart the rendering loop...")
     print0(colored("Saving at {} x {} ressolution".format(g_res,g_res),'green'))
     
@@ -293,7 +302,7 @@ def main():
 
             for count in range(args.instance):
                                 
-                for trans_type in range(4):
+                for trans_type in range(args.rotation):
                                             
                     if trans_type == 0:
                         rotation = [1.0,1.0]
@@ -327,36 +336,48 @@ def main():
                     
                     if args.debug:
                         data_np = np.frombuffer(data, dtype=np.byte)
+                        print("Item size in np array and itemsize: {:,} , {}".format(data_np.size,data_np.itemsize))
+                        print("Raw data from framebuffer to numpy: {:,} bytes".format(int(data_np.size * data_np.itemsize)))
+                        
                         pixel_count = np.sum(data_np/127/3)
                     
+                        print(colored("\nPixel count: {:,}".format(int(pixel_count)),'light_magenta'))
+                                                
+                        data = glReadPixels(0.0, 0.0, g_res, g_res, GL_RGB, GL_UNSIGNED_BYTE, None)
+                        data_np = np.frombuffer(data, dtype=np.byte)
+                        df = pd.DataFrame(data_np)
+                        print('FrameBuffer dataframe info: {}'.format(df.describe()))
+                        # print(data_np)
+                        
+                        poss_bytes = poss.read()
+                        poss_np = np.frombuffer(poss_bytes, dtype=np.float32)
+                        
+                        df = pd.DataFrame(poss_np)      
+                                            
+                        print('Points generated dataframe info: {}'.format(df.describe()))
+                        print('Info related to borders...')
+                        print(' From CPU:\n rand: {} {}, param_size: {}, rot: {} {}'.format(rnd[0],rnd[1],param_size,rotation[0],rotation[1]))
+                                                
+                        limit_bytes = prj.read()
+                        limits = np.frombuffer(limit_bytes, dtype=np.float32)
+                        print('limits: {}'.format(limits))
+                        
+                        im = Image.frombytes('RGB', (g_res, g_res), data)
+                        print('PIL image actual size {}'.format(im ))
+                        membuf = BytesIO()
+                        im.save(membuf, format="png") 
+                        
+                        print(membuf.getvalue())
+                        print('\nTotal amount of bytes: {:,}'.format(membuf.__sizeof__()))
+                        
+                        im.save(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip"+ str(trans_type) + ".png"))
+                        
+                        print(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip"+ str(trans_type) + ".png"))
+                        
+                        # exit(0)
+                        
                         if pixel_count <= 9.0:
                             print("\n\nFrameBuffer bytes is not full !!")
-                            print("Pixel count: {}".format(pixel_count))
-                                                    
-                            data = glReadPixels(0.0, 0.0, g_res, g_res, GL_RGB, GL_UNSIGNED_BYTE, None)
-                            data_np = np.frombuffer(data, dtype=np.byte)
-                            df = pd.DataFrame(data_np)
-                            print('FrameBuffer dataframe info: {}'.format(df.describe()))
-                            # print(data_np)
-                            
-                            poss_bytes = poss.read()
-                            poss_np = np.frombuffer(poss_bytes, dtype=np.float32)
-                            
-                            df = pd.DataFrame(poss_np)      
-                                                
-                            print('Points generated dataframe info: {}'.format(df.describe()))
-                            print('Info related to borders...')
-                            print(' From CPU:\n rand: {} {}, param_size: {}, rot: {} {}'.format(rnd[0],rnd[1],param_size,rotation[0],rotation[1]))
-                                                    
-                            limit_bytes = prj.read()
-                            limits = np.frombuffer(limit_bytes, dtype=np.float32)
-                            print('limits: {}'.format(limits))
-                            
-                            image = Image.frombytes('RGB', (g_res, g_res), data)
-                            image.save(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip"+ str(trans_type) + ".png"))
-                            
-                            print(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip"+ str(trans_type) + ".png"))
-                            
                             exit(0)
                         else:
                             image = Image.frombytes('RGB', (g_res, g_res), data)
@@ -374,6 +395,12 @@ def main():
                     else:
                         
                         if args.tomemory:
+                            im = Image.frombytes('RGB', (g_res, g_res), data)
+                            membuf = BytesIO()
+                            im.save(membuf, format="png") 
+                            # print(membuf.getvalue())
+                            # print(colored('\nTotal amount of bytes: {:,}'.format(membuf.__sizeof__()),'blue'))
+                            # exit(0)
                             pass  
                         else:
                             image = Image.frombytes('RGB', (g_res, g_res), data)

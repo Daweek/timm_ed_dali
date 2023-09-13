@@ -14,7 +14,7 @@ import math
 # import glm as glm
 import numpy as np
 from torch import BufferDict
-
+import random
 import cv2
 import argparse
 
@@ -29,6 +29,8 @@ from torchvision import transforms
 import matplotlib.pyplot as plt
 
 from mpi4py import MPI
+
+from io import BytesIO
 
 comm = MPI.COMM_WORLD
 mpirank = comm.Get_rank()
@@ -68,6 +70,7 @@ parser.add_argument('--iteration', default=200000, type = int, help='iteration')
 parser.add_argument('--draw_type', default='patch_gray', type = str, help='{point, patch}_{gray, color}')
 parser.add_argument('--weight_csv', default='./weights/weights_0.4.csv', type = str, help='weight parameter')
 parser.add_argument('--instance', default=10, type = int, help='#instance, 10 => 1000 instance, 100 => 10,000 instance per category')
+parser.add_argument('--rotation', default=4, type = int, help='Flip per category')
 parser.add_argument('--checkpoint', default=0, type = int, help='From last class that was not created')
 parser.add_argument('--pmode', default=0, type = int, help='Patch Mode...')
 parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='Do not save the image but only retain to memory')
@@ -75,6 +78,10 @@ parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='
 	
 def main():
     args = parser.parse_args()
+    # Set the seeds
+    np.random.seed(2041)
+    random.seed(2041)
+    
     # Main variables
     starttime = time.time()
     #args = conf()
@@ -140,8 +147,8 @@ def main():
         class_num = 0
     
     
-    dtset_tensor = torch.FloatTensor()
-    
+    # dtset_tensor = torch.FloatTensor()
+    dataset = []
     for csv_name in tqdm(csv_names):
         initial_time = time.perf_counter()
         name, ext = os.path.splitext(csv_name)
@@ -181,7 +188,7 @@ def main():
             
             for count in range(args.instance):
                 
-                for trans_type in range(4):
+                for trans_type in range(args.rotation):
                 
                     flip_flg = trans_type % 4
                     
@@ -192,8 +199,16 @@ def main():
                     out_data = transforms.ToPILImage()(out_data_tensor.squeeze_(0))
 
                     if args.tomemory:
-                        dtset_tensor = torch.cat((dtset_tensor,out_data_tensor),1)
-                        # pass  
+                        
+                        membuf = BytesIO()
+                        out_data.save(membuf, format="png")
+                        dataset.append(membuf) 
+                        # print(membuf.getvalue())
+                        # print(colored('\nTotal amount of bytes: {:,}'.format(membuf.__sizeof__()),'blue'))
+                        # exit(0)
+                        
+                        # dtset_tensor = torch.cat((dtset_tensor,out_data_tensor),1)
+                        pass  
                     else:
                     # print(out_data)
                         out_data.save(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip" + str(trans_type) + ".png"),"PNG")
@@ -206,10 +221,12 @@ def main():
         total_time = time.perf_counter() - initial_time
         print0(colored(" Total time render per class: {:.4f} sec, ({:0>4}) {:.4f} frm/sec ".format(total_time,str(timedelta(seconds=total_time)),1000/total_time),'magenta'))
 
-    #glfw.terminate()
+    
     print0(f"rank: {mpirank}, Finished...\n")
     print0(f"Waiting for the rest of the ranks...")
     comm.Barrier()
+    
+    
     
     fina_experiment_time = time.perf_counter() - t1
     print0(colored("\n\n\tTotal experiment time: {:.4f} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'red'))

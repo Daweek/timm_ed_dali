@@ -35,7 +35,7 @@ class MyDataset(Dataset):
         self.c = c
         self.h = h
         self.w = w
-        byte = sys.getsizeof(float)
+        byte = sys.getsizeof(np.byte)
         self.ram = sm.SharedMemory(create=True, size= byte * n * c * h * w, name='dataset')
         dataset = self.ram.buf
         
@@ -109,7 +109,7 @@ def main():
         last_epoch = len(loader) - 1
         for idx, x in enumerate(loader):
             if idx % freq == 0 or idx % last_epoch == 0 :
-                print("Epoch:{}, Read from cache Index {} = {:,d}".format(epoch,idx, x.sum()))
+                print("Epoch:{}, Read from cache Index {} =\t\t {:>28,} bytes".format(epoch,idx, int(x.sum())))
             else:
                 pass
         t1 = time.perf_counter()
