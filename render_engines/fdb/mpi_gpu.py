@@ -104,6 +104,7 @@ parser.add_argument('--draw_type', default='patch_gray', type = str, help='{poin
 parser.add_argument('--weight_csv', default='./weights/weights_0.4.csv', type = str, help='weight parameter')
 parser.add_argument('--instance', default=10, type = int, help='#instance, 10 => 1000 instance, 100 => 10,000 instance per category')
 parser.add_argument('--rotation', default=4, type = int, help='Flip per category')
+parser.add_argument('--nweights', default=25, type = int, help='Transformation of each weights. Original DB is 25 from csv files')
 parser.add_argument('-g','--ngpus-pernode', default=1, type = int, help='Num of GPUs in the node')
 parser.add_argument('--backend', default='egl', type = str, help='{GLFW, EGL}')
 parser.add_argument('-d', '--debug', action='store_true',default=False,help='Check sanity for all the images... pixel count')
@@ -129,6 +130,13 @@ def main():
     csv_names = os.listdir(args.load_root)
     csv_names.sort()
     weights = np.genfromtxt(args.weight_csv,dtype=float,delimiter=',')
+    
+    if args.nweights <= 25 and args.nweights > 0:
+        weights = weights[:args.nweights]
+    else:
+        print('error on weights [1-25]')
+        exit(0)
+    
 
     args.save_root = args.save_root + '_' + args.backend
 

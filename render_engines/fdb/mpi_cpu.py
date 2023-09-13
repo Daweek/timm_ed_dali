@@ -71,6 +71,7 @@ parser.add_argument('--draw_type', default='patch_gray', type = str, help='{poin
 parser.add_argument('--weight_csv', default='./weights/weights_0.4.csv', type = str, help='weight parameter')
 parser.add_argument('--instance', default=10, type = int, help='#instance, 10 => 1000 instance, 100 => 10,000 instance per category')
 parser.add_argument('--rotation', default=4, type = int, help='Flip per category')
+parser.add_argument('--nweights', default=25, type = int, help='Transformation of each weights. Original DB is 25 from csv files')
 parser.add_argument('--checkpoint', default=0, type = int, help='From last class that was not created')
 parser.add_argument('--pmode', default=0, type = int, help='Patch Mode...')
 parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='Do not save the image but only retain to memory')
@@ -88,8 +89,13 @@ def main():
     csv_names = os.listdir(args.csv)
     csv_names.sort()
     weights = np.genfromtxt(args.weight_csv,dtype=float,delimiter=',')
-    weight = weights[0]
     
+    if args.nweights <= 25 and args.nweights > 0:
+        weights = weights[:args.nweights]
+    else:
+        print('error on weights [1-25]')
+        exit(0)
+
     # MPI related configurations
     nlist = len(csv_names)
     print0(f"\n\nNumber of Classes found in csv files {nlist}")
