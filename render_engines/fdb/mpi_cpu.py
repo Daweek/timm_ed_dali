@@ -237,9 +237,10 @@ def main():
     
     print0('\nInformation gater from memory..')
     added:int = 0
+    print(dataset)
     for i, x in enumerate(dataset):
         added += x.__sizeof__()
-        # print0("total images:{} bytes {:,}".format(i+1,added))
+        print0("total images:{} bytes {:,}".format(i+1,added))
     print0('Total bytes readed from rank 0 {:,}'.format(added))
     
     # we are gonna communicate all the ranks and their added bytes...
