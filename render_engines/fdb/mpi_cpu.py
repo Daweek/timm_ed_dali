@@ -156,7 +156,7 @@ def main():
     
     
     # dtset_tensor = torch.FloatTensor()
-    dataset = []
+    # dataset = []
     for csv_name in tqdm(csv_names):
         initial_time = time.perf_counter()
         name, ext = os.path.splitext(csv_name)
@@ -208,9 +208,9 @@ def main():
 
                     if args.tomemory:
                         
-                        membuf = BytesIO()
-                        out_data.save(membuf, format="png")
-                        dataset.append(membuf) 
+                        # membuf = BytesIO()
+                        # out_data.save(membuf, format="png")
+                        # dataset.append(membuf) 
                         # print(membuf.getvalue())
                         # print(colored('\nTotal amount of bytes: {:,}'.format(membuf.__sizeof__()),'blue'))
                         # exit(0)
@@ -237,11 +237,11 @@ def main():
     
     print0('\nInformation gater from memory..')
     added:int = 0
-    print(dataset)
-    for i, x in enumerate(dataset):
-        added += x.__sizeof__()
-        print0("total images:{} bytes {:,}".format(i+1,added))
-    print0('Total bytes readed from rank 0 {:,}'.format(added))
+    # print(dataset)
+    # for i, x in enumerate(dataset):
+    #     added += x.__sizeof__()
+    #     print0("total images:{} bytes {:,}".format(i+1,added))
+    # print0('Total bytes readed from rank 0 {:,}'.format(added))
     
     # we are gonna communicate all the ranks and their added bytes...
     

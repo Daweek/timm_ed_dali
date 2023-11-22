@@ -50,12 +50,12 @@ comm = MPI.COMM_WORLD
 mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
 
-def print0(message):
+def print0(*args):
     if dist.is_initialized():
         if dist.get_rank() == 0:
-            print(message, flush=True)
+            print(*args, flush=True)
     else:
-        print(message, flush=True)
+        print(*args, flush=True)
 
 
 def reduce_tensor_debug(tensor, n):

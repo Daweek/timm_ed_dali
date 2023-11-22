@@ -27,3 +27,6 @@ mpirun --bind-to socket -np 8 python finetune_Dali_All.py $SGE_LOCALDIR/cifar100
 
 # Fine-tune DAlI to CIFAR100 
 mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -np 4 python finetune_Dali_All.py $SGE_LOCALDIR/cifar100 --dali --model deit_tiny_patch16_224 --experiment test_interactive --input-size 3 224 224 --num-classes 100 --batch-size 96 --opt sgd --lr 0.01 --weight-decay 0.0001 --deit-scale 512.0 --sched cosine --lr-cycle-mul 1.0 --min-lr 1e-05 --decay-rate 0.1 --warmup-lr 1e-06 --warmup-epochs 10  --lr-cycle-limit 1 --cooldown-epochs 0 --mixup 0.8 --cutmix 1.0 --mixup-prob 1.0 --mixup-switch-prob 0.5 --mixup-mode batch --smoothing 0.1 --drop-path 0.1 -j 19 --no-prefetcher --amp --pin-mem
+
+############## TEST TORCH-CUDA
+python -c "import torch; print(torch.__version__); print(torch.__config__.show()); print(torch.__config__.parallel_info())"

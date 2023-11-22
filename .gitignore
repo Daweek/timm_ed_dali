@@ -1,5 +1,6 @@
 *.[__pycache__]
-# *.[tar]
+/.ssd
+/.ssd_v
 /.python-version
 
 /checkpoint
@@ -24,4 +25,5 @@
 
 /render_engines/fdb/csv/searched_params
 
-render_engines/fdb/ssd
+/render_engines/fdb/ssd
+/render_engines/fdb/nfs

@@ -12,7 +12,7 @@ from datetime import timedelta
 import math
 
 # from Fractal2D_cpu import Fractal2D_cpu, worker_init_fdb_fn
-from customdataloader_egl import MyLoader_egl, worker_init_egl_fn
+# from customdataloader_egl import MyLoader_egl, worker_init_egl_fn
 
 from nvidia.dali.plugin.pytorch import DALIClassificationIterator, LastBatchPolicy
 from nvidia.dali.pipeline import pipeline_def
@@ -22,7 +22,7 @@ import nvidia.dali.fn as fn
 import argparse
 from termcolor import colored
 # from egl_dalicustom_context import ExternalInputIterator_EGL
-from egl_fdb_iterator import ExternalInputIterator_EGL
+# from egl_fdb_iterator import ExternalInputIterator_EGL
 
 import webdataset as wds
 
