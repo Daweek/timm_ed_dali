@@ -61,7 +61,7 @@ parser.add_argument('--dgpu', action='store_true', default=False,
 
 #FFCV pipeline
 parser.add_argument('-f','--ffcv', action='store_true', default=False,
-                    help='Using DALI pipeline')
+                    help='Using FFCV pipeline')
 
 
 # CPU render

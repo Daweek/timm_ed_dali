@@ -53,12 +53,12 @@ from io import BytesIO
 g_components = 3
 g_alignment = 1
 
-def print0(message):
+def print0(*args):
     if mpisize > 1:
         if mpirank == 0:
-            print(message, flush=True)
+            print(*args, flush=True)
     else:
-        print(message, flush=True)
+        print(*args, flush=True)
 
 
 def cal_pix(gray):
@@ -112,6 +112,9 @@ parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='
 
 def main():
     args = parser.parse_args()
+    print0("\n\nAll arguments:\n",args)
+    print0("\n\n")
+    
     
     # Set the seeds
     np.random.seed(2041)
@@ -406,10 +409,10 @@ def main():
                     else:
                         
                         if args.tomemory:
-                            im = Image.frombytes('RGB', (g_res, g_res), data)
-                            membuf = BytesIO()
-                            im.save(membuf, format="png")
-                            dataset.append(membuf) 
+                            # im = Image.frombytes('RGB', (g_res, g_res), data)
+                            # membuf = BytesIO()
+                            # im.save(membuf, format="png")
+                            # dataset.append(membuf) 
                             # print(membuf.getvalue())
                             # print(colored('\nTotal amount of bytes: {:,}'.format(membuf.__sizeof__()),'blue'))
                             # exit(0)

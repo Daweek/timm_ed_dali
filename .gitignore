@@ -19,6 +19,10 @@
 /render_engines/fdb/bake_db
 /render_engines/fdb/csv/large
 /render_engines/fdb/csv/data1k_fromPython
+/render_engines/fdb/ssd_*
+/render_engines/fdb/ssd
+
+
 
 /render_engines/fdb/ed_fractal2d_cpu/build
 /render_engines/fdb/ed_fractal2d_cpu/data

@@ -38,12 +38,12 @@ mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
 
 
-def print0(message):
+def print0(*args):
     if mpisize > 1:
         if mpirank == 0:
-            print(message, flush=True)
+            print(*args, flush=True)
     else:
-        print(message, flush=True)
+        print(*args, flush=True)
 
 def cal_pix(gray):
     height, width = gray.shape
@@ -81,6 +81,10 @@ parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='
 	
 def main():
     args = parser.parse_args()
+    print0("\n\nAll arguments:\n",args)
+    print0("\n\n")
+    
+    
     # Set the seeds
     np.random.seed(2041)
     random.seed(2041)
