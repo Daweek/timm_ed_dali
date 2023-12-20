@@ -179,7 +179,7 @@ def main():
             padded_fractal_weight = '%02d' % fractal_weight
             fractal_weight_count = padded_fractal_weight
                        
-            params = np.genfromtxt(os.path.join(args.csv, csv_name), dtype=float, delimiter=',')
+            params = np.genfromtxt(os.path.join(args.load_root, csv_name), dtype=float, delimiter=',')
             
             flip_flg = 0
             
