@@ -27,12 +27,12 @@ g_components = 3
 g_alignment = 1
 DEV = 0
 
-def print0(message):
+def print0(*args):
     if mpisize > 1:
         if mpirank == 0:
-            print(message, flush=True)
+            print(*args, flush=True)
     else:
-        print(message, flush=True)
+        print(*args, flush=True)
 
 def cal_pix(gray):
     height, width = gray.shape
@@ -51,10 +51,13 @@ parser.add_argument('--rate', default=0.2, type = float, help='filling rate: (fr
 parser.add_argument('--category', default=10, type = int, help='# of category')
 parser.add_argument('--numof_point', default=200000, type = int, help='# of point')
 parser.add_argument('--save_dir', default='./csv/searched_params', type = str, help='save directory')
-args = parser.parse_args()
+
 
 def main():
-
+    args = parser.parse_args()
+    print0("\n\nAll arguments:\n",args)
+    print0("\n\n")
+    
     # Main variables
     np.random.seed(1)
     threshold = args.rate
