@@ -13,6 +13,7 @@ from datetime import timedelta
 from termcolor import colored
 from tqdm import tqdm
 import array
+import random
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
@@ -22,7 +23,7 @@ mpisize = comm.Get_size()
 from PIL import Image
 
 
-g_res = 362
+# g_res = 362
 g_components = 3
 g_alignment = 1
 DEV = 0
@@ -51,6 +52,7 @@ parser.add_argument('--rate', default=0.2, type = float, help='filling rate: (fr
 parser.add_argument('--category', default=10, type = int, help='# of category')
 parser.add_argument('--numof_point', default=200000, type = int, help='# of point')
 parser.add_argument('--save_dir', default='./csv/searched_params', type = str, help='save directory')
+parser.add_argument('--image_res', default=362, type = int, help='image size')
 
 
 def main():
@@ -59,7 +61,13 @@ def main():
     print0("\n\n")
     
     # Main variables
-    np.random.seed(1)
+    # Set the seeds
+    np.random.seed(2041)
+    random.seed(2041)
+    
+    # Added global relosolution
+    g_res = args.image_res
+    
     threshold = args.rate
     class_num = 0
     save_dir = args.save_dir
@@ -118,20 +126,13 @@ def main():
             (color,'2f','pixcolor'),
             ])
     
-
-    np.random.seed(753)
     print0("\nStart the rendering loop...")
+    print0(colored("Saving at {} x {} ressolution".format(g_res,g_res),'green'))
 
 
-    # Compute time realted variables
-        # t2 = time.perf_counter()
-        # update = t2 - t
-        # d = t2 - t1
-        # t1 = t2
     # Loop until the user closes the window
     while (class_num < args.category):
                   
-   
         # Prepare mappings
         #print("Computing Params...")
         #np.random.seed(66)
@@ -154,17 +155,6 @@ def main():
         rotation = [1.0,1.0]
         
         rnd = np.random.uniform(size=2)
-        # #print(rnd)
-        # compute['rnd'].write(struct.pack('2f',rnd[0],rnd[1]))
-
-        # for i in range(param_size):
-        #     compute['map['+ str(i) +'].a'] = params[i][0]
-        #     compute['map['+ str(i) +'].b'] = params[i][1]
-        #     compute['map['+ str(i) +'].c'] = params[i][2]
-        #     compute['map['+ str(i) +'].d'] = params[i][3]
-        #     compute['map['+ str(i) +'].x'] = params[i][4]
-        #     compute['map['+ str(i) +'].y'] = params[i][5]
-        #     compute['map['+ str(i) +'].p'] = params[i][6]
 
         uniforms_buffer = struct.pack('ffi2f',rnd[0],rnd[1],param_size,rotation[0],rotation[1])
         uniforms.write(uniforms_buffer)
@@ -208,7 +198,6 @@ def main():
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
 
         image = np.asarray(img)
-
        
         pixels = cal_pix(image[:,:,0].copy())
 
@@ -230,15 +219,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-# if(printfirst):
-#             print("First Print")
-#             print(data)
-#             printfirst = False
-
-#         if (update >= 3.0):  
-#             print("\tFrames per second: {} ".format(1.0/d))
-#             print("\tSeconds per frame: {:.9f} ".format(d))
-#             print("\tDensity:{:.9f} ".format(pixels))
-#             t = time.perf_counter()
-#             print(data)

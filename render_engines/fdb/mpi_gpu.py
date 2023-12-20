@@ -96,7 +96,7 @@ parser.add_argument('--load_root', default='./csv/data1k_fromPython/csv_rate0.2_
 parser.add_argument('--save_root', default='./bake_db/test', type = str, help='save png root')
 parser.add_argument('--image_size_x', default=362, type = int, help='image size x')
 parser.add_argument('--image_size_y', default=362, type = int, help='image size y')
-parser.add_argument('--image-res', default=362, type = int, help='image size y')
+parser.add_argument('--image_res', default=362, type = int, help='image size y')
 parser.add_argument('--pad_size_x', default=6, type = int, help='padding size x')
 parser.add_argument('--pad_size_y', default=6, type = int, help='padding size y')
 parser.add_argument('--iteration', default=200000, type = int, help='iteration')
@@ -115,12 +115,10 @@ def main():
     print0("\n\nAll arguments:\n",args)
     print0("\n\n")
     
-    
     # Set the seeds
     np.random.seed(2041)
     random.seed(2041)
 
-    
     # Parse the backend
     if not (args.backend == 'glfw' or args.backend == 'egl'):
         print("No available backend.->>>>>>>>>>>>>>> exit(0)")

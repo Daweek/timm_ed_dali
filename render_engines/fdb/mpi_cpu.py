@@ -65,7 +65,7 @@ parser.add_argument('--load_root', default='./csv/data1k_fromPython/csv_rate0.2_
 parser.add_argument('--save_root', default='./bake_db/testCPU', type = str, help='save png root')
 parser.add_argument('--image_size_x', default=362, type = int, help='image size x')
 parser.add_argument('--image_size_y', default=362, type = int, help='image size y')
-parser.add_argument('--image-res', default=362, type = int, help='image size y')
+parser.add_argument('--image_res', default=362, type = int, help='image size y')
 parser.add_argument('--pad_size_x', default=6, type = int, help='padding size x')
 parser.add_argument('--pad_size_y', default=6, type = int, help='padding size y')
 parser.add_argument('--iteration', default=200000, type = int, help='iteration')
