@@ -92,7 +92,7 @@ def main():
     # Main variables
     starttime = time.time()
     #args = conf()
-    csv_names = os.listdir(args.csv)
+    csv_names = os.listdir(args.load_root)
     csv_names.sort()
     weights = np.genfromtxt(args.weight_csv,dtype=float,delimiter=',')
     
