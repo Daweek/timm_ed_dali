@@ -33,9 +33,17 @@ export RENDER_HWD=egl
 export DATASET=${LOCALDIR}/fdb1k_${RENDER_HWD}
 
 cd render_engines/fdb
-echo "Start rendering to local ..."
+echo "Start SEARCHING to local ..."
 # mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu
-mpirun --bind-to socket --use-hwthread-cpus -np 80 python mpi_gpu.py --image-res 112 --save_root /beeond/fdb1k --ngpus-pernode 4
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 320 python mpi_ifs_search_egl.py --category 1000 --save_dir /beeond
+
+# mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu
+# mpirun --bind-to socket --use-hwthread-cpus -np 80 python mpi_gpu.py --image_res 362 --save_root /beeond/fdb1k --ngpus-pernode 4
+echo "Start REDNERING to local ..."
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 320 python mpi_gpu.py --image_res 362 --ngpus-pernode 4 --save_root /beeond/fdb1k --load_root /beeond/csv_rate0.2_category1000_points200000 
+
+##### Debug local
+# ${SSD}/fdb1k
 # du -sh ${DATASET}
 cd ../../
 ##################################
@@ -55,7 +63,7 @@ export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
 
-export EXPERIMENT=x112
+export EXPERIMENT=newCSV_0
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 

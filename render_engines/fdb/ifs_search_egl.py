@@ -205,7 +205,7 @@ def main():
             class_str =  '%07d' % class_num
             print ('save: '+class_str)
             #cv2.imwrite(os.path.join(img_dir, class_str + '.png'),img)
-            img.save(os.path.join(img_dir, class_str + '.png'))
+            # img.save(os.path.join(img_dir, class_str + '.png'))
             np.savetxt(os.path.join(cat_dir, class_str + '.csv'), params, delimiter=',')
             class_num += 1
         else:
