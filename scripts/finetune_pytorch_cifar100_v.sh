@@ -32,7 +32,6 @@ export NGPUS=8
 export NUM_PROC=4
 export PIPE=PyTo
 
-
 # ========= For experiment and pre-train
 export RENDER_HWD=egl
 export PRE_STORAGE=ssd
@@ -45,18 +44,16 @@ export BATCH_SIZE=768
 export LOCAL_BATCH_SIZE=96
 
 export SSD=/local/${JOB_ID}.1.gpu
-export PRE_JOB_ID=41181728
-export EXPERIMENT=x362_b
+export PRE_JOB_ID=41188956
+export PRE_EXPERIMENT=newCSV_0
 
+export EXPERIMENT=newCSV_noAMP
 # For Timm scripts...
 # export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/checkpoint/tiny/fdb1k/pre_training/pretrain_deit_tiny_fdb1k_lr1.0e-3_epochs300_bs512_ssd_362x_GLFW3090/last.pth.tar  #----->>>>> best so far... 86.72
 
-export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/${PRE_JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${EXPERIMENT}/last.pth.tar
-
-
+export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/${PRE_JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${PRE_EXPERIMENT}/last.pth.tar
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/fine_tuning
-
 
 echo "Copy and Untar..."
 mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 2 time tar -xf /home/acc12930pb/datasets/cifar100.tar -C ${SSD}
@@ -77,10 +74,10 @@ python finetune.py ${SSD}/cifar100 \
     --mixup 0.8 --cutmix 1.0 --mixup-prob 1.0 --mixup-switch-prob 0.5 --mixup-mode batch --smoothing 0.1 --drop-path 0.1 \
     -j 19 --no-prefetcher \
     --output ${OUT_DIR} \
-    --amp \
     --log-wandb \
     --pin-mem \
-    --pretrained-path ${CP_DIR}
+    --pretrained-path ${CP_DIR} \
+    # --amp \
 
 echo "Compute Finished..."
 ################################################################

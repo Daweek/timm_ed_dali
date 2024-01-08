@@ -3,8 +3,8 @@
 #$ -l rt_F=32
 #$ -l h_rt=30:00:00
 #$ -j y
-#$ -o output/$JOB_ID_pretrain_deit_base_fdb21k_rendertossd.out
-#$ -N pretrain_vit_base_patch16_224
+#$ -o output/$JOB_ID_pretrain_deit_tiny_dali_fdb21k_rendertossd.out
+#$ -N pretrain_vit_tiny_dali_patch16_224
 #$ -l USE_BEEOND=1
 cat $JOB_SCRIPT
 cat dali/pipe_train.py
@@ -21,8 +21,6 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
 pyenv local torch_20_311
-
-wandb enabled
 
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
@@ -52,17 +50,20 @@ export NUM_PROC=4
 export PIPE=Dali
 export STORAGE=ssd
 
-export MODEL=base
-export LR=1.0e-3
+export MODEL=tiny
+export LR=8.0e-3
 export CLS=21
 export EPOCHS=90
 export LOCAL_BATCH_SIZE=64
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
 
-export EXPERIMENT=newCSV_noAMP
+export EXPERIMENT=searchCSV
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
+
+
+wandb enabled
 
 # FDB - 1k - Custom
 mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
