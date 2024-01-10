@@ -4,6 +4,7 @@
 #$ -l h_rt=10:00:00
 #$ -j y
 #$ -o output/$JOB_ID_finetune_pytorch_deit_tiny_cifar100.out
+#$ -N finetune_dali_deit_tiny_cifar100
 
 cat $JOB_SCRIPT
 cat dali/pipe_finetune.py
@@ -12,16 +13,14 @@ echo "JOB ID: ---- >>>>>>   $JOB_ID"
 # ======== Modules ========
 source /etc/profile.d/modules.sh
 module purge
-module load cuda/12.0/12.0.0 cudnn/8.8/8.8.1 nccl/2.17/2.17.1-1 gcc/12.2.0 cmake/3.26.1 hpcx-mt/2.12
+module load cuda/12.2/12.2.0 cudnn/8.9/8.9.2 nccl/2.18/2.18.5-1 gcc/12.2.0 cmake/3.26.1 hpcx-mt/2.12
 
 # ======== Pyenv/ ========
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
-pyenv local torch_20_311
-
-wandb enabled
+pyenv local torch_21_3117
 
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
@@ -34,7 +33,7 @@ export NUM_PROC=4
 export PIPE=Dali
 
 # ========= For experiment and pre-train
-export RENDER_HWD=egl
+export RENDER_HWD=files
 export PRE_STORAGE=ssd
 export MODEL=tiny
 export PRE_CLS=1
@@ -45,10 +44,10 @@ export BATCH_SIZE=768
 export LOCAL_BATCH_SIZE=96
 
 export SSD=/local/${JOB_ID}.1.gpu
-export PRE_JOB_ID=41188995
-export PRE_EXPERIMENT=newCSV_0
+export PRE_JOB_ID=41286307
+export PRE_EXPERIMENT=glfwOrig
 
-export EXPERIMENT=newCSV_noAMP
+export EXPERIMENT=glfwOrig_amp
 # For Timm scripts...
 # export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/checkpoint/tiny/fdb1k/pre_training/pretrain_deit_tiny_fdb1k_lr1.0e-3_epochs300_bs512_ssd_362x_GLFW3090/last.pth.tar  #----->>>>> best so far... 86.72
 
@@ -60,6 +59,8 @@ echo "Copy and Untar..."
 mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 2 time tar -xf /home/acc12930pb/datasets/cifar100.tar -C ${SSD}
 readlink -f ${SSD}
 echo "Finished copying and Untar..."
+
+wandb enabled
 
 mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
 python finetune.py ${SSD}/cifar100 --dali \
@@ -74,7 +75,7 @@ python finetune.py ${SSD}/cifar100 --dali \
     --log-wandb \
     --pin-mem \
     --pretrained-path ${CP_DIR} \
-    # --amp \
+    --amp \
 
 echo "Compute Finished..."
 ################################################################

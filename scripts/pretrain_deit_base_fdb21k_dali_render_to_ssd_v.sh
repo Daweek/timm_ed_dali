@@ -13,14 +13,14 @@ echo "JOB ID: ---- >>>>>>   $JOB_ID"
 # ======== Modules ========
 source /etc/profile.d/modules.sh
 module purge
-module load cuda/12.0/12.0.0 cudnn/8.8/8.8.1 nccl/2.17/2.17.1-1 gcc/12.2.0 cmake/3.26.1 hpcx-mt/2.12
+module load cuda/12.2/12.2.0 cudnn/8.9/8.9.2 nccl/2.18/2.18.5-1 gcc/12.2.0 cmake/3.26.1 hpcx-mt/2.12
 
 # ======== Pyenv/ ========
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
-pyenv local torch_20_311
+pyenv local torch_21_3117
 
 wandb enabled
 
@@ -36,7 +36,7 @@ cd render_engines/fdb
 
 echo "Start SEARCHING to local ..."
 # mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu
-mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 2560 python mpi_ifs_search_egl.py --category 21000 --save_dir /beeond
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 2560 python mpi_ifs_search_egl.py  --ngpus-pernode 4--category 21000 --save_dir /beeond
 
 echo "Start rendering to local ..."
 # mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu

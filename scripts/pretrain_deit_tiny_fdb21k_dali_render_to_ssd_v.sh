@@ -13,14 +13,14 @@ echo "JOB ID: ---- >>>>>>   $JOB_ID"
 # ======== Modules ========
 source /etc/profile.d/modules.sh
 module purge
-module load cuda/12.0/12.0.0 cudnn/8.8/8.8.1 nccl/2.17/2.17.1-1 gcc/12.2.0 cmake/3.26.1 hpcx-mt/2.12
+module load cuda/12.2/12.2.0 cudnn/8.9/8.9.2 nccl/2.18/2.18.5-1 gcc/12.2.0 cmake/3.26.1 hpcx-mt/2.12
 
 # ======== Pyenv/ ========
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
-pyenv local torch_20_311
+pyenv local torch_21_3117
 
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
