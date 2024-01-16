@@ -4,8 +4,8 @@
 /.ssd_v
 /.python-version
 
-ssd/
-ssdb/
+ssd
+ssdb
 
 /checkpoint
 /datasets
