@@ -22,7 +22,7 @@ eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
 pyenv local torch_21_3117
 
-wandb enabled
+
 
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
@@ -64,6 +64,7 @@ export EXPERIMENT=newCSV_noAMP
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 
+wandb enabled
 # FDB - 1k - Custom
 mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
 python pretrain.py ${DATASET} --dali \

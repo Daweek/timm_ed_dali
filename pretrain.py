@@ -560,7 +560,6 @@ def main():
             # t0 = time.perf_counter()
             
             # # local_gpu = rank % torch.cuda.device_count()
-            
             # eii_gpu = ExternalInputIterator_EGL(args.batch_size, device_id=args.local_rank, num_gpus=world_size,root=args.root,oneinstance=True)
             
             # # time.sleep(2)

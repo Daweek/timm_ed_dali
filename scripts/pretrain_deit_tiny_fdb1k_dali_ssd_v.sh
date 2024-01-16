@@ -47,7 +47,7 @@ export STORAGE=ssd
 
 export MODEL=tiny
 export LR=1.0e-3
-export CLS=1
+export CLS=1 
 export EPOCHS=300
 export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))

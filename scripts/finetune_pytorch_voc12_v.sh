@@ -3,11 +3,11 @@
 #$ -l rt_F=2
 #$ -l h_rt=10:00:00
 #$ -j y
-#$ -o output/$JOB_ID_finetune_pyto_deit_tiny_cifar100.out
-#$ -N finetune_pyto_deit_tiny_cifar100
-cat $JOB_SCRIPT
+#$ -o output/$JOB_ID_finetune_pyto_deit_tiny_voc12.out
+#$ -N finetune_pyto_deit_tiny_voc12
 
-echo "...................................................................................................\n\n\n"
+cat $JOB_SCRIPT
+echo "..................................................................................................."
 echo "JOB ID: ---- >>>>>>   $JOB_ID"
 # ======== Modules ========
 source /etc/profile.d/modules.sh
@@ -43,8 +43,8 @@ export BATCH_SIZE=768
 export LOCAL_BATCH_SIZE=96
 
 # ========= Fine-Tune dataset info
-export DATASET_NAME=cifar100
-export DATASET_NUMCLS=100
+export DATASET_NAME=voc12
+export DATASET_NUMCLS=20
 
 export SSD=/local/${JOB_ID}.1.gpu
 export PRE_JOB_ID=00000000
@@ -59,7 +59,7 @@ export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/che
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/fine_tuning
 
 echo "Copy and Untar..."
-mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 2 time tar -xf /home/acc12930pb/scratch/datasets/${DATASET_NAME}.tar -C ${SSD}
+mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 2 time tar -xf /home/acc12930pb/working/datasets/${DATASET_NAME}.tar -C ${SSD}
 readlink -f ${SSD}
 echo "Finished copying and Untar..."
 
@@ -67,15 +67,11 @@ wandb enabled
 
 mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
 python finetune.py ${SSD}/${DATASET_NAME} \
-    --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_fine_deit_${PIPE}_${MODEL}_cifar100_from_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_epochs${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${EXPERIMENT} \
-    --input-size 3 224 224 --num-classes 100  \
+    --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_fine_deit_${PIPE}_${MODEL}_${DATASET_NAME}_from_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_epochs${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${EXPERIMENT} \
+    --input-size 3 224 224 --num-classes ${DATASET_NUMCLS}  \
     --batch-size ${LOCAL_BATCH_SIZE} --opt sgd --lr 0.01 --weight-decay 0.0001 --deit-scale 512.0 \
     --sched cosine  --epochs 1000  --lr-cycle-mul 1.0 --min-lr 1e-05 --decay-rate 0.1 --warmup-lr 1e-06 --warmup-epochs 10  --lr-cycle-limit 1 --cooldown-epochs 0 \
-    --scale 0.08 1.0 --ratio 0.75 1.3333 --hflip 0.5 --color-jitter 0.4 --interpolation bicubic --train-interpolation bicubic --crop-pct 1.0 \
-    --mean 0.485 0.456 0.406 \
-    --std 0.229 0.224 0.225 \
-    --reprob 0.25 --recount 1 --remode pixel \
-    --aa rand-m9-mstd0.5-inc1 \
+    --scale 0.08 1.0 --ratio 0.75 1.3333 \
     --mixup 0.8 --cutmix 1.0 --mixup-prob 1.0 --mixup-switch-prob 0.5 --mixup-mode batch --smoothing 0.1 --drop-path 0.1 \
     -j 19 --no-prefetcher \
     --output ${OUT_DIR} \

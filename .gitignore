@@ -1,7 +1,11 @@
 *.[__pycache__]
 /.ssd
+/.ssdb
 /.ssd_v
 /.python-version
+
+ssd/
+ssdb/
 
 /checkpoint
 /datasets
@@ -12,7 +16,7 @@
 /benchmarks/shaders
 /benchmarks/tars
 /benchmarks/weights
-/benchmarks/ssd
+/benchmarks/ssd*
 
 
 
@@ -29,5 +33,5 @@
 
 /render_engines/fdb/csv/searched_params
 
-
 /render_engines/fdb/nfs
+/render_engines/fdb/wandb

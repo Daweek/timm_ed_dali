@@ -34,11 +34,11 @@ cd render_engines/fdb
 
 echo "Start SEARCHING to local ..."
 # mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu
-mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 2560 python mpi_ifs_search_egl.py --category 21000 --save_dir /beeond
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 2560 python mpi_ifs_search_egl.py --ngpus-pernode 4 --category 21000 --save_dir /beeond
 
 echo "Start rendering to local ..."
 # mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu
-mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 2560 python mpi_gpu.py --ngpus-pernode 4 --image_res 362 --save_root /beeond/fdb21k --load_root /beeond/csv_rate0.2_category21000_points200000 
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 2560 python mpi_gpu.py --ngpus-pernode 4  --image_res 362 --save_root /beeond/fdb21k --load_root /beeond/csv_rate0.2_category21000_points200000 
 # du -sh ${DATASET}
 cd ../../
 ##################################
@@ -51,7 +51,7 @@ export PIPE=Dali
 export STORAGE=ssd
 
 export MODEL=tiny
-export LR=8.0e-3
+export LR=1.0e-3
 export CLS=21
 export EPOCHS=90
 export LOCAL_BATCH_SIZE=64
@@ -70,7 +70,7 @@ mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $
 python pretrain.py ${DATASET} --dali \
     --model deit_${MODEL}_patch16_${INPUT_SIZE} --experiment ${JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_${EXPERIMENT} \
     --input-size 3 ${INPUT_SIZE} ${INPUT_SIZE} \
-    --epochs ${EPOCHS} --opt adamw --lr ${LR} --weight-decay 0.05 --deit-scale 512.0 \
+    --epochs ${EPOCHS} --opt adamw --lr ${LR} --weight-decay 0.05 --deit-scale 8192.0 \
     --sched cosine_iter --min-lr 1.0e-5 --warmup-lr 1e-06 --warmup-epochs 5 --warmup-iter 5000 --cooldown-epochs 0 \
     --batch-size ${LOCAL_BATCH_SIZE} \
     --scale 0.08 1.0 --ratio 0.75 1.3333 \
