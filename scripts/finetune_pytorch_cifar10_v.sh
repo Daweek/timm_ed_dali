@@ -3,7 +3,7 @@
 #$ -l rt_F=2
 #$ -l h_rt=10:00:00
 #$ -j y
-#$ -o output/$JOB_ID_finetune_pytorch_deit_tiny_cifar10.out
+#$ -o output/$JOB_ID_finetune_pyto_deit_tiny_cifar10.out
 #$ -N finetune_pyto_deit_tiny_cifar10
 
 cat $JOB_SCRIPT

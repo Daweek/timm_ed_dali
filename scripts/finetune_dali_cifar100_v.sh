@@ -1,10 +1,11 @@
 #!/bin/bash
 #$ -cwd
 #$ -l rt_F=2
-#$ -l h_rt=10:00:00
+#$ -l h_rt=02:00:00
 #$ -j y
 #$ -o output/$JOB_ID_finetune_dali_deit_tiny_cifar100.out
 #$ -N finetune_dali_deit_tiny_cifar100
+
 cat $JOB_SCRIPT
 cat dali/pipe_finetune.py
 echo ".................................................................................................\n\n\n"
@@ -32,13 +33,14 @@ export NUM_PROC=4
 export PIPE=Dali
 
 # ========= For experiment and pre-train
-export RENDER_HWD=files
+export RENDER_HWD=egl
 export PRE_STORAGE=ssd
 export MODEL=tiny
-export PRE_CLS=1
+export PRE_CLS=21
 export PRE_LR=1.0e-3
-export PRE_EPOCHS=300
-export PRE_BATCH=512
+export PRE_EPOCHS=90
+export PRE_BATCH=8192
+
 export BATCH_SIZE=768
 export LOCAL_BATCH_SIZE=96
 
@@ -47,14 +49,14 @@ export DATASET_NAME=cifar100
 export DATASET_NUMCLS=100
 
 export SSD=/local/${JOB_ID}.1.gpu
-export PRE_JOB_ID=00000000
-export PRE_EXPERIMENT=GLFW3090
+export PRE_JOB_ID=41317088
+export PRE_EXPERIMENT=searchCSV
 
-export EXPERIMENT=GLFW3090
+export EXPERIMENT=searchCSV
 # For Timm scripts...
-export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/checkpoint/tiny/fdb1k/pre_training/pretrain_deit_tiny_fdb1k_lr1.0e-3_epochs300_bs512_ssd_362x_GLFW3090/last.pth.tar  #----->>>>> best so far... 86.72
+# export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/checkpoint/tiny/fdb1k/pre_training/pretrain_deit_tiny_fdb1k_lr1.0e-3_epochs300_bs512_ssd_362x_GLFW3090/last.pth.tar  #----->>>>> best so far... 86.72
 
-# export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/${PRE_JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${PRE_EXPERIMENT}/last.pth.tar
+export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/${PRE_JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${PRE_EXPERIMENT}/last.pth.tar
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/fine_tuning
 
