@@ -80,8 +80,8 @@ parser.add_argument('--render-countpatch', type=int, default=1, metavar='N',
 parser.add_argument('--render-patchmode', type=int, default=0, metavar='N',
                     help='Image patch size (default: None => model default)')
 
-# from mpi4py import MPI
-# comm = MPI.COMM_WORLD
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
 
 def print0(*args):
     if dist.is_initialized():
@@ -218,24 +218,24 @@ def main():
         terminal_clr = 'blue'
     
     ssd =  os.getenv("SGE_LOCALDIR", default="/tmp")
-    # master_addr = os.getenv("MASTER_ADDR", default="localhost")
-    # master_port = os.getenv('MASTER_POST', default='8686')
-    # method = "tcp://{}:{}".format(master_addr, master_port)
-    # rank = int(os.getenv('OMPI_COMM_WORLD_RANK', '0'))
-    # world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE', '1'))
-    rank = 0
-    world_size = 1
+    master_addr = os.getenv("MASTER_ADDR", default="localhost")
+    master_port = os.getenv('MASTER_POST', default='8686')
+    method = "tcp://{}:{}".format(master_addr, master_port)
+    rank = int(os.getenv('OMPI_COMM_WORLD_RANK', '0'))
+    world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE', '1'))
+    # rank = 0
+    # world_size = 1
     args.world_size = world_size
     
     
     ngpus_per_node = torch.cuda.device_count()
-    node = rank // ngpus_per_node
+    # node = rank // ngpus_per_node
     args.local_rank = device = rank % ngpus_per_node
     torch.cuda.set_device(args.local_rank)
-    # dist.init_process_group("nccl", init_method=method, rank=rank, world_size=world_size)
+    dist.init_process_group("nccl", init_method=method, rank=rank, world_size=world_size)
     
     print("WorldSize {}  rank {} -> Ready".format(world_size, rank))
-    # dist.barrier()
+    dist.barrier()
       
     train_transform = transforms.Compose([transforms.RandomCrop(224),
                                           transforms.RandomHorizontalFlip(0.5),
@@ -421,8 +421,17 @@ def main():
     
     else:
         print0(colored("===<<<< Loading files from PyTorch...",terminal_clr))
-        print0("Loading from:{}".format(args.root))
+        print("Loading from:{}".format(args.root))
         t0 = time.perf_counter()
+        
+        
+        if rank == 0:
+            args.root = "ssd/fdb10_egl"
+        elif rank == 1:
+            args.root = "ssd/fdb10_b_egl"
+        else:
+            pass
+        
         
         train_dataset = datasets.ImageFolder(args.root,transform=train_transform)
         print(train_dataset.imgs)
@@ -439,9 +448,9 @@ def main():
                                                     )
         t1 = time.perf_counter()
         
-        print0("Dataset length: {:,} total images".format(len(train_dataset)))
-        print0("Batches per Rank to be processed: {:,} total batches".format(len(train_loader)))
-        print0("Time to load categories:{} seconds\n".format(t1-t0))
+        print("Dataset length: {:,} total images".format(len(train_dataset)))
+        print("Batches per Rank to be processed: {:,} total batches".format(len(train_loader)))
+        print("Time to load categories:{} seconds\n".format(t1-t0))
 
  
     model = None

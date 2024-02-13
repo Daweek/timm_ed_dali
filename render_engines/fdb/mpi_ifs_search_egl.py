@@ -64,8 +64,8 @@ def main():
     
     # Main variables
     # Set the seeds
-    np.random.seed(2041+mpirank)
-    random.seed(2041+mpirank)
+    np.random.seed(2042+mpirank)
+    random.seed(2042+mpirank)
     
     # Added global relosolution
     g_res = args.image_res
