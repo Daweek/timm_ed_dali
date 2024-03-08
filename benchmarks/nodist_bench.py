@@ -427,7 +427,7 @@ def main():
         train_dataset = datasets.ImageFolder(args.root,transform=train_transform)
         print(train_dataset.imgs)
         
-        train_sampler = torch_data_distributed.DistributedSampler(train_dataset,num_replicas=world_size,rank=rank)
+        train_sampler = torch_data_distributed.DistributedSampler(train_dataset,num_replicas=1,rank=rank%4)
 
         train_loader = torch_data.DataLoader(dataset=train_dataset,
                                                     batch_size=args.batch_size,

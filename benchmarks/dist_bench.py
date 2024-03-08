@@ -36,6 +36,11 @@ from ffcv.transforms import RandomHorizontalFlip, Cutout, \
 from ffcv.transforms.common import Squeeze
 from ffcv.writer import DatasetWriter
 
+# Custom for local batch experiments
+import sys
+sys.path.insert(0,'../')
+from myfolder.FolderNumberToIdx import ImageFolderNumber_To_Idx
+
 parser = argparse.ArgumentParser(description='PyTorch fractal make FractalDB')
 parser.add_argument('-j', '--workers', type=int, default=-1, metavar='N',
                     help='how many training processes to use (default: 1)')
@@ -420,10 +425,7 @@ def main():
         
     
     else:
-        print0(colored("===<<<< Loading files from PyTorch...",terminal_clr))
-        print("Loading from:{}".format(args.root))
-        t0 = time.perf_counter()
-        
+        print0(colored("===<<<< Loading files from PyTorch...",terminal_clr))      
         
         if rank == 0:
             args.root = "ssd/fdb10_egl"
@@ -432,9 +434,22 @@ def main():
         else:
             pass
         
+        print("Loading from:{}".format(args.root))
+        t0 = time.perf_counter()
+        
         
         train_dataset = datasets.ImageFolder(args.root,transform=train_transform)
-        print(train_dataset.imgs)
+        # print(train_dataset.imgs)
+        # print(train_dataset.classes)
+        print(train_dataset.class_to_idx)
+        
+        dist.barrier()
+        
+        print("Custom Folder to get class_idx from the folder name")
+        
+        train_local = ImageFolderNumber_To_Idx(args.root,transform=train_transform)
+        print(train_local.class_to_idx)
+
         
         train_sampler = torch_data_distributed.DistributedSampler(train_dataset,num_replicas=world_size,rank=rank)
 
@@ -447,6 +462,10 @@ def main():
                                                     prefetch_factor=4,
                                                     )
         t1 = time.perf_counter()
+        
+        
+        
+
         
         print("Dataset length: {:,} total images".format(len(train_dataset)))
         print("Batches per Rank to be processed: {:,} total batches".format(len(train_loader)))

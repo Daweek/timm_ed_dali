@@ -4,7 +4,7 @@
 #$ -l h_rt=15:00:00
 #$ -j y
 #$ -o output/$JOB_ID_pretrain_deit_tiny_pyto_fdb1k_ssd.out
-#$ -N pret_vit_tiny_p16_224_pyto_fdb1k
+#$ -N pret_vit_tiny_224_pyto_fdb1k
 #$ -l USE_BEEOND=1
 cat $JOB_SCRIPT
 echo ".....................................................................................\n\n\n"
@@ -27,12 +27,12 @@ export PYTHONWARNINGS="ignore"
 ############# Render to local SSD
 export LOCALDIR=/beeond
 export RENDER_HWD=files
-export DATASET=/beeond/FractalDB-1000-EGL-GLFW
+export DATASET=/beeond/FractalDB1k_1k_CPUNak
 
 echo "Copy and Untar..."
 
-time cp /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB-1000-EGL-GLFW.tar /beeond
-time tar -xf /beeond/FractalDB-1000-EGL-GLFW.tar -C /beeond
+time cp /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB1k_1k_CPUNak.tar /beeond
+time tar -xf /beeond/FractalDB1k_1k_CPUNak.tar -C /beeond
 # time pv /beeond/FractalDB-1000-EGL-GLFW.tar | tar -x -C /beeond
 echo "Finished copying and Untar..."
 
@@ -52,7 +52,7 @@ export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
 
-export EXPERIMENT=glfwOrig
+export EXPERIMENT=CPUNak
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 

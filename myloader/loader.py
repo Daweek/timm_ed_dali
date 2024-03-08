@@ -220,6 +220,9 @@ def create_loader(
         repeated_aug=False,
         split_fake=False,
         worker_init_fn=None,
+        portiontossd=False,
+        rank=None,
+        
 ):
     re_num_splits = 0
     if re_split:
@@ -253,6 +256,10 @@ def create_loader(
         if is_training:
             if repeated_aug:
                 sampler = RASampler(dataset)
+            elif portiontossd:
+                # In this moment we hardcoded this to see if it works... 16 GPUs but only 4 Nodes...
+                print("Replicas to 4 from Distributed loader...")
+                sampler = torch.utils.data.DistributedSampler(dataset,num_replicas=4,rank=rank % 4)
             else:
                 sampler = torch.utils.data.DistributedSampler(dataset)
         else:

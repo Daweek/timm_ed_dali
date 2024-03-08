@@ -3,9 +3,9 @@
 #$ -l rt_F=4
 #$ -l h_rt=10:00:00
 #$ -j y
-#$ -o output/$JOB_ID_pretrain_deit_tiny_pyto_fdb1k_rendertossd.out
-#$ -N pret_vit_tiny_p16_224_pyto_fdb1k
-#$ -l USE_BEEOND=1
+#$ -o output/$JOB_ID_pretrain_deit_tiny_pyto_fdb1k_renderportiontossd.out
+#$ -N pret_vit_tiny_p16_224_pyto_fdb1k_portion
+#######################$ -l USE_BEEOND=1
 cat $JOB_SCRIPT
 echo "..................................................................................................."
 echo "JOB ID: ---- >>>>>>   $JOB_ID"
@@ -26,33 +26,34 @@ export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
 
 ############# Render to local SSD
-# export SSD=/local/${JOB_ID}.1.gpu
-# export LOCALDIR=${SSD}
-export LOCALDIR=/beeond
+export SSD=/local/${JOB_ID}.1.gpu
+export LOCALDIR=${SSD}
 export RENDER_HWD=cpu
 export DATASET=${LOCALDIR}/fdb1k_${RENDER_HWD}
 
 cd render_engines/fdb
 echo "Start SEARCHING to local ..."
 # mpirun --bind-to none --use-hwthread-cpus -np 80 python mpi_cpu.py --save_root ${LOCALDIR}/fdb1k_cpu
-#mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 320 python mpi_ifs_search_egl.py --category 1000 --save_dir /beeond
-mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 time tar -xf /home/acc12930pb/working/transformer/timm_ed_dali/render_engines/fdb/csv/data1k_fromPython.tar -C ${LOCALDIR}
+# mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 320 python mpi_ifs_search_egl.py --category 1000 --save_dir /beeond
+mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 time tar -xf /home/acc12930pb/working/transformer/timm_ed_dali/render_engines/fdb/csv/data1k_fromPython.tar -C ${SSD}
 
-# echo "Make sure that we create a directory before we start rendering on each node..."
+echo "Make sure that we create a directory before we start rendering on each node..."
 # For GPU
 # mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 mkdir ${SSD}/fdb1k_egl
 # For CPU
-# mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 mkdir ${SSD}/fdb1k_cpu
+mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 mkdir ${SSD}/fdb1k_cpu
 
-echo "Start REDNERING to local ..."
+echo "Start RENDERING to local ..."
 # For GPU
-# mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 320 python mpi_gpu.py --image_res 362 --ngpus-pernode 4 --save_root /beeond/fdb1k --load_root /beeond/csv_rate0.2_category1000_points200000 
-
-mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 80 -np 320 python mpi_cpu.py --image_res 362 --save_root ${LOCALDIR}/fdb1k_cpu --load_root ${LOCALDIR}/data1k_fromPython/csv_rate0.2_category1000
+# mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 50 -np 200 python mpi_gpu.py --image_res 362 --ngpus-pernode 4 --save_root ${SSD}/fdb1k --load_root ${SSD}/data1k_fromPython/csv_rate0.2_category1000 
+# For CPU
+mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -npernode 50 -np 200 python mpi_cpu.py --image_res 362 --save_root ${SSD}/fdb1k_cpu --load_root ${SSD}/data1k_fromPython/csv_rate0.2_category1000
 
 ##### Debug local
-# ${SSD}/fdb1k
-# du -sh ${DATASET}
+readlink -f ${SSD}
+ls ${SSD}
+mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 ls ${SSD}/fdb1k_cpu 
+mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 find ${SSD}/fdb1k_cpu -type f -print |wc -l
 
 cd ../../
 ##################################
@@ -75,7 +76,7 @@ export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
 
-export EXPERIMENT=CPU_0
+export EXPERIMENT=localShuf_0
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 
@@ -83,7 +84,7 @@ wandb enabled
 
 # FDB - 1k - Custom
 mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
-python pretrain.py ${DATASET} \
+python portiontossd_pretrain.py ${DATASET} \
     --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_${EXPERIMENT} \
     --input-size 3 ${INPUT_SIZE} ${INPUT_SIZE} \
     --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5  --color-jitter 0.4 \
@@ -98,6 +99,7 @@ python pretrain.py ${DATASET} \
     --interval-saved-epochs 100 --output ${OUT_DIR} \
     --no-prefetcher --amp \
     --log-wandb \
+    --portiontossd \
 
 echo "Compute Finished..."
 ################################################################
