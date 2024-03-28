@@ -34,13 +34,12 @@ from mpi4py import MPI
 from io import BytesIO
 
 comm = MPI.COMM_WORLD
-mpirank = comm.Get_rank()
-mpisize = comm.Get_size()
-
+g_mpirank = comm.Get_rank()
+g_mpisize = comm.Get_size()
 
 def print0(*args):
-    if mpisize > 1:
-        if mpirank == 0:
+    if g_mpisize > 1:
+        if g_mpirank == 0:
             print(*args, flush=True)
     else:
         print(*args, flush=True)
@@ -77,17 +76,13 @@ parser.add_argument('--nweights', default=25, type = int, help='Transformation o
 parser.add_argument('--checkpoint', default=0, type = int, help='From last class that was not created')
 parser.add_argument('--pmode', default=0, type = int, help='Patch Mode...')
 parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='Do not save the image but only retain to memory')
+parser.add_argument('-l', '--local_ranks', action='store_true',default=False,help='Select if we render within the resources of only one node - Using local Ranks')
 
 	
 def main():
     args = parser.parse_args()
     print0("\n\nAll arguments:\n",args)
-    print0("\n\n")
-    
-    
-    # Set the seeds
-    np.random.seed(2041)
-    random.seed(2041)
+    print0("\n\n")      
     
     # Main variables
     starttime = time.time()
@@ -105,6 +100,23 @@ def main():
     # MPI related configurations
     nlist = len(csv_names)
     print0(f"\n\nNumber of Classes found in csv files {nlist}")
+    
+    # Select if we render within the resources of only one node - Using local Ranks
+    
+    if args.local_ranks:
+        print0(colored('Using per local ranks to render to local SSD. Render within the node.','yellow', 'on_black',['bold', 'blink']))
+        mpisize = int(os.getenv('OMPI_COMM_WORLD_LOCAL_SIZE', '0'))
+        mpirank = int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0'))
+        # Set the seeds
+        np.random.seed(1+mpirank)
+        random.seed(1+mpirank)
+    else:
+        mpisize = g_mpisize
+        mpirank = g_mpirank
+        # Set the seeds
+        np.random.seed(1+mpirank)
+        random.seed(1+mpirank)
+    
     nlist_per_rank = (nlist+mpisize-1)//mpisize
     start_list = mpirank*nlist_per_rank
     end_list = min((mpirank+1)*nlist_per_rank, nlist)
@@ -112,13 +124,13 @@ def main():
     csv_names = csv_names[start_list:end_list]
     print0(f"rank: {mpirank}, csv_names:{csv_names}]\n\n")
 
-    comm.Barrier()
-    if mpirank == 0:
+    # comm.Barrier()
+    # Check per node to create directory to render
+    if int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0')) == 0:
         if not os.path.exists(os.path.join(args.save_root)):
             # print("Error: No directory to save DB")
             # exit(0)
             os.mkdir(os.path.join(args.save_root))
-
     comm.Barrier()
 
     print0("Rendering here: {}".format(os.path.join(args.save_root)))
@@ -238,23 +250,20 @@ def main():
     print0(f"Waiting for the rest of the ranks...")
     comm.Barrier()
     
+    ################ TODO to use RAM to allocate the PNGs
+    # print0('\nInformation gater from memory..')
+    # added:int = 0
+    # # print(dataset)
+    # # for i, x in enumerate(dataset):
+    # #     added += x.__sizeof__()
+    # #     print0("total images:{} bytes {:,}".format(i+1,added))
+    # # print0('Total bytes readed from rank 0 {:,}'.format(added))
     
-    print0('\nInformation gater from memory..')
-    added:int = 0
-    # print(dataset)
-    # for i, x in enumerate(dataset):
-    #     added += x.__sizeof__()
-    #     print0("total images:{} bytes {:,}".format(i+1,added))
-    # print0('Total bytes readed from rank 0 {:,}'.format(added))
-    
-    # we are gonna communicate all the ranks and their added bytes...
-    
-    
-    memory_t = torch.tensor(added)
-    gather_mem = MPI.COMM_WORLD.reduce(memory_t, op=MPI.SUM,root=0)
-    if mpirank == 0:
-        print0('Total amount of data gather from MPI ranks on png dataset: {:,}'.format(gather_mem))
-    
+    # # we are gonna communicate all the ranks and their added bytes...
+    # memory_t = torch.tensor(added)
+    # gather_mem = MPI.COMM_WORLD.reduce(memory_t, op=MPI.SUM,root=0)
+    # if mpirank == 0:
+    #     print0('Total amount of data gather from MPI ranks on png dataset: {:,}'.format(gather_mem))
     
     
     fina_experiment_time = time.perf_counter() - t1

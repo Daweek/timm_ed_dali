@@ -306,6 +306,8 @@ parser.add_argument('--imnet-oneinstance', action='store_true', default=False,
 ## For local shuffling and only portion of dataset
 parser.add_argument('--portiontossd', action='store_true', default=False, 
                     help='To load only portion of the dataset...')
+parser.add_argument('--portion-ngpus', type=int, default=1, metavar='N',
+                    help='how many nodes in total to divide the distributed loader')
 
 ## For DALI
 #DALI pipeline
@@ -639,9 +641,9 @@ def main():
             # else:
             #     pass
         
-            print("Loading from:{}".format(args.data_dir))
+            print0("Loading from:{}".format(args.data_dir))
             dataset_train = ImageFolderNumber_To_Idx(root=args.data_dir)
-            print(dataset_train.class_to_idx)
+            print0(dataset_train.class_to_idx)
 
         else:
             # create datasets with timm's dataloader
@@ -702,6 +704,7 @@ def main():
             worker_init_fn=None,
             persistent_workers=True,
             portiontossd=args.portiontossd,
+            ngpus=args.portion_ngpus,
             rank=args.rank,
         )
         

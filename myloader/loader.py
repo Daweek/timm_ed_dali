@@ -18,6 +18,14 @@ from timm.data.distributed_sampler import OrderedDistributedSampler
 from timm.data.random_erasing import RandomErasing
 from timm.data.mixup import FastCollateMixup
 
+
+def print0(*args):
+    if dist.is_initialized():
+        if dist.get_rank() == 0:
+            print(*args, flush=True)
+    else:
+        print(*args, flush=True)
+
 class RASampler(torch.utils.data.Sampler):
     """Sampler from FacebookResearch for Repeated Augmentation
     Sampler that restricts data loading to a subset of the dataset for distributed,
@@ -221,6 +229,7 @@ def create_loader(
         split_fake=False,
         worker_init_fn=None,
         portiontossd=False,
+        ngpus=1,
         rank=None,
         
 ):
@@ -257,9 +266,9 @@ def create_loader(
             if repeated_aug:
                 sampler = RASampler(dataset)
             elif portiontossd:
-                # In this moment we hardcoded this to see if it works... 16 GPUs but only 4 Nodes...
-                print("Replicas to 4 from Distributed loader...")
-                sampler = torch.utils.data.DistributedSampler(dataset,num_replicas=4,rank=rank % 4)
+                # Check that num_replicas is = to the # gpus in the system. Since we are rotating inside the same node, the rank should rotate on the same number of GPUs.
+                print0("Replicas to {} from Distributed loader...".format(ngpus))
+                sampler = torch.utils.data.DistributedSampler(dataset,num_replicas=ngpus,rank=rank % ngpus)
             else:
                 sampler = torch.utils.data.DistributedSampler(dataset)
         else:

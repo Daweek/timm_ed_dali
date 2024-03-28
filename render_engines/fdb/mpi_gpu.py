@@ -42,8 +42,8 @@ import array
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
-mpirank = comm.Get_rank()
-mpisize = comm.Get_size()
+g_mpirank = comm.Get_rank()
+g_mpisize = comm.Get_size()
 
 from io import BytesIO
 
@@ -54,8 +54,8 @@ g_components = 3
 g_alignment = 1
 
 def print0(*args):
-    if mpisize > 1:
-        if mpirank == 0:
+    if g_mpisize > 1:
+        if g_mpirank == 0:
             print(*args, flush=True)
     else:
         print(*args, flush=True)
@@ -109,15 +109,13 @@ parser.add_argument('-g','--ngpus-pernode', default=1, type = int, help='Num of 
 parser.add_argument('--backend', default='egl', type = str, help='{GLFW, EGL}')
 parser.add_argument('-d', '--debug', action='store_true',default=False,help='Check sanity for all the images... pixel count')
 parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='Do not save the image but only retain to memory')
+parser.add_argument('-l', '--local_ranks', action='store_true',default=False,help='Select if we render within the resources of only one node - Using local Ranks')
 
 def main():
     args = parser.parse_args()
     print0("\n\nAll arguments:\n",args)
     print0("\n\n")
     
-    # Set the seeds
-    np.random.seed(2041)
-    random.seed(2041)
 
     # Parse the backend
     if not (args.backend == 'glfw' or args.backend == 'egl'):
@@ -138,14 +136,27 @@ def main():
         print('error on weights [1-25]')
         exit(0)
     
-
     args.save_root = args.save_root + '_' + args.backend
 
     # MPI related configurations
-    DEV = mpirank % args.ngpus_pernode #->Fix Thissssssssssssssssss
-    
     nlist = len(csv_names)
     print0(f"Number of Classes found in csv files {nlist}")
+    
+    # Select if we render within the resources of only one node - Using local Ranks
+    if args.local_ranks:
+        print0(colored('Using per local ranks to render to local SSD. Render within the node.','yellow', 'on_black',['bold', 'blink']))
+        mpisize = int(os.getenv('OMPI_COMM_WORLD_LOCAL_SIZE', '0'))
+        mpirank = int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0'))
+        # Set the seeds
+        np.random.seed(1+mpirank)
+        random.seed(1+mpirank)
+    else:
+        mpisize = g_mpisize
+        mpirank = g_mpirank
+        # Set the seeds
+        np.random.seed(1+mpirank)
+        random.seed(1+mpirank)
+    
     nlist_per_rank = (nlist+mpisize-1)//mpisize
     start_list = mpirank*nlist_per_rank
     end_list = min((mpirank+1)*nlist_per_rank, nlist)
@@ -153,7 +164,8 @@ def main():
     csv_names = csv_names[start_list:end_list]
     print0(f"rank: {mpirank}, csv_names:{csv_names}]\n\n")
     # comm.Barrier()
-    if mpirank == 0:
+    #Check per node to create directory to render
+    if int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0')) == 0:
         if not os.path.exists(os.path.join(args.save_root)):
             # print("Error: No directory to save DB")
             # exit(0)
@@ -161,6 +173,7 @@ def main():
     comm.Barrier()
   
     print0("Rendering here: {}".format(os.path.join(args.save_root)))
+    DEV = mpirank % args.ngpus_pernode #->Fix Thissssssssssssssssss
     comm.Barrier()
     # Initialize backend and context
     if args.backend == 'glfw':

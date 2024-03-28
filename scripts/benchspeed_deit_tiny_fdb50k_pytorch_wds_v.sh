@@ -1,11 +1,11 @@
 #!/bin/bash
 #$ -cwd
 #$ -l rt_F=100
-#$ -l h_rt=02:00:00
+#$ -l h_rt=01:00:00
 #$ -j y
-#$ -o output/$JOB_ID_pretrain_deit_base_fdb21k_wds.out
+#$ -o output/$JOB_ID_pretrain_deit_base_fdb50k_wds.out
 #$ -N pret_vit_base_patch16_224_pyto_wds
-#$ -l USE_BEEOND=1
+#####$ -l USE_BEEOND=1
 cat $JOB_SCRIPT
 echo "....................................................................................."
 echo "JOB ID: ---- >>>>>>   $JOB_ID"
@@ -32,7 +32,7 @@ export DATASET=/NOT/WORKING
 # cd render_engines/fdb
 
 ############ For WDS
-export SHARDS="/home/acc12930pb/datasets/MVFractal_Shards_21k_384/mvf_21k_384-train-{000000..002099}.tar"
+export SHARDS="/home/acc12930pb/scratch/fdb/fdb50k/shards_fdb50k_egl/fdb50k-train-{000000..004999}.tar"
 
 ##################################
 
@@ -43,15 +43,15 @@ export NUM_PROC=4
 export PIPE=PyTo
 export STORAGE=wds
 
-export MODEL=base
+export MODEL=tiny
 export LR=1.0e-3
-export CLS=21
+export CLS=50
 export EPOCHS=5
 export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
 
-export EXPERIMENT=wds_21k
+export EXPERIMENT=wds_50k
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 
@@ -64,16 +64,15 @@ python pretrain.py /NOT/WORKING -w --trainshards ${SHARDS} \
     --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5  --color-jitter 0.4 \
     --hflip 0.5 --vflip 0.5 --scale 0.08 1.0 --ratio 0.75 1.3333 \
     --epochs ${EPOCHS} --opt adamw --lr ${LR} --weight-decay 0.05 --deit-scale 12800.0 \
-    --sched cosine_iter --min-lr 1.0e-5 --warmup-lr 1e-04 --warmup-epochs 5 --warmup-iter 5000 --cooldown-epochs 0 \
+    --sched cosine_iter --min-lr 1.0e-5 --warmup-lr 1e-06 --warmup-epochs 5 --warmup-iter 5000 --cooldown-epochs 0 \
     --aa rand-m9-mstd0.5-inc1  --train-interpolation random \
     --reprob 0.25 --remode pixel \
     --batch-size ${LOCAL_BATCH_SIZE} -j 19 --pin-mem \
     --mixup 0.8 --cutmix 1.0 --drop-path 0.1 \
     --num-classes ${CLS}000 --eval-metric loss \
     --interval-saved-epochs 100 --output ${OUT_DIR} \
-    --no-prefetcher  \
+    --no-prefetcher --amp  \
     --log-wandb \
-    --amp \
 
 echo "Compute Finished..."
 ################################################################

@@ -17,8 +17,8 @@ import random
 
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
-mpirank = comm.Get_rank()
-mpisize = comm.Get_size()
+g_mpirank = comm.Get_rank()
+g_mpisize = comm.Get_size()
 
 from PIL import Image
 
@@ -29,8 +29,8 @@ g_alignment = 1
 # DEV = 0
 
 def print0(*args):
-    if mpisize > 1:
-        if mpirank == 0:
+    if g_mpisize > 1:
+        if g_mpirank == 0:
             print(*args, flush=True)
     else:
         print(*args, flush=True)
@@ -55,17 +55,12 @@ parser.add_argument('--save_dir', default='./csv/searched_params', type = str, h
 parser.add_argument('--image_res', default=362, type = int, help='image size')
 parser.add_argument('-g','--ngpus-pernode', default=1, type = int, help='Num of GPUs in the node')
 parser.add_argument('--backend', default='egl', type = str, help='{GLFW, EGL}')
-
+parser.add_argument('-l', '--local_ranks', action='store_true',default=False,help='Select if we render within the resources of only one node - Using local Ranks')
 
 def main():
     args = parser.parse_args()
     print0("\n\nAll arguments:\n",args)
     print0("\n\n")
-    
-    # Main variables
-    # Set the seeds
-    np.random.seed(2042+mpirank)
-    random.seed(2042+mpirank)
     
     # Added global relosolution
     g_res = args.image_res
@@ -74,14 +69,28 @@ def main():
     save_dir = args.save_dir
     
     # MPI related configurations
-    DEV = mpirank % args.ngpus_pernode #->Fix Thissssssssssssssssss
-    
     categories = list(range(0,args.category))
     nlist = int(args.category)
     print0(f"Total number of 'Classes-Fractal' to search: {nlist}")
+    
+    if args.local_ranks:
+        print0(colored('Using per local ranks to render to local SSD. Render within the node.','yellow', 'on_black',['bold', 'blink']))
+        mpisize = int(os.getenv('OMPI_COMM_WORLD_LOCAL_SIZE', '0'))
+        mpirank = int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0'))
+        # Set the seeds
+        np.random.seed(1+mpirank)
+        random.seed(1+mpirank)
+    else:
+        mpisize = g_mpisize
+        mpirank = g_mpirank
+        # Set the seeds
+        np.random.seed(1+mpirank)
+        random.seed(1+mpirank)
+    
     nlist_per_rank = (nlist+mpisize-1)//mpisize
     start_list = mpirank*nlist_per_rank
     end_list = min((mpirank+1)*nlist_per_rank, nlist)
+    DEV = mpirank % args.ngpus_pernode #->Fix Thissssssssssssssssss
 
     categories = categories[start_list:end_list]
     print0(f"rank: {mpirank}, csv_names:{categories}]\n\n")
@@ -89,8 +98,8 @@ def main():
     img_dir = os.path.join(args.save_dir, 'rate' + str(args.rate) + '_category' + str(args.category)+'_points'+str(args.numof_point))
     cat_dir = os.path.join(args.save_dir, 'csv_rate' + str(args.rate) + '_category' + str(args.category)+'_points'+str(args.numof_point))
     
-    # Check and create directories
-    if mpirank == 0:
+    # Check per node to create directory to render
+    if int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0')) == 0:
         if os.path.exists(img_dir) == False:
             os.makedirs(img_dir)
 
@@ -235,8 +244,7 @@ def main():
                 break
             else:
                 # break
-                pass
-       
+                pass   
 
     print0(f"rank: {mpirank}, Finished...\n")
     print0(f"Waiting for the rest of the ranks...")
