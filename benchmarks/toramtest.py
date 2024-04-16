@@ -16,8 +16,6 @@ from multiprocessing import shared_memory as sm
 import numpy as np
 
 
-
-
 parser = argparse.ArgumentParser(description='To ram test')
 parser.add_argument('-n','--nsamples',default=1000, type = int, help='...')
 parser.add_argument('-j','--workers', default=10, type = int, help='...')

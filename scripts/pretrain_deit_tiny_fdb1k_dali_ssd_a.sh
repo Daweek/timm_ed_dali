@@ -1,12 +1,13 @@
 #!/bin/bash
 #$ -cwd
-#$ -l rt_F=4
+#$ -l rt_AF=2
 #$ -l h_rt=15:00:00
 #$ -j y
-#$ -o output/$JOB_ID_pretrain_deit_tiny_pyto_fdb1k_ssd.out
-#$ -N pret_vit_tiny_224_pyto_fdb1k
-######$ -l USE_BEEOND=1
+#$ -o output/$JOB_ID_pretrain_deit_tiny_dali_fdb1k_ssd.out
+#$ -N pret_vit_tiny_p16_224_dali_fdb1k
+#######$ -l USE_BEEOND=1
 cat $JOB_SCRIPT
+cat dali/pipe_train.py
 echo ".....................................................................................\n\n\n"
 echo "JOB ID: ---- >>>>>>   $JOB_ID"
 # ======== Modules ========
@@ -25,37 +26,38 @@ export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
 
 ############# Render to local SSD
-export SSD=/local/${JOB_ID}.1.gpu
+export SSD=/local/${JOB_ID}.1.gpua
 export LOCALDIR=${SSD}
 export RENDER_HWD=files
 export DATASET=${LOCALDIR}/FractalDB1k_1k_CPUNak
+#export DATASET=/beeond/FractalDB-1000-EGL-GLFW
 
 echo "Copy and Untar..."
 
-# time cp /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB1k_1k_CPUNak.tar /beeond
-# time tar -xf ${SSD}/FractalDB1k_1k_CPUNak.tar -C /beeond
-mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 time tar -xf /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB1k_1k_CPUNak.tar -C ${SSD}
+# time cp /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB-1000-EGL-GLFW.tar /beeond
+# time tar -xf /beeond/FractalDB-1000-EGL-GLFW.tar -C /beeond
+# time pv /beeond/FractalDB-1000-EGL-GLFW.tar | tar -x -C /beeond
+mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 2 time tar -xf /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB1k_1k_CPUNak.tar -C ${SSD}
 readlink -f ${SSD}
 
-# time pv /beeond/FractalDB-1000-EGL-GLFW.tar | tar -x -C /beeond
 echo "Finished copying and Untar..."
 
 export MASTER_ADDR=$(/usr/sbin/ip a show dev bond0 | grep inet | cut -d " " -f 6 | cut -d "/" -f 1|head -n 1)
 export MASTER_PORT=2042
 export NGPUS=16
-export NUM_PROC=4
-export PIPE=PyTo
+export NUM_PROC=8
+export PIPE=Dali
 export STORAGE=ssd
 
 export MODEL=tiny
 export LR=1.0e-3
-export CLS=1
+export CLS=1 
 export EPOCHS=300
 export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
 
-export EXPERIMENT=CPUNak
+export EXPERIMENT=CPUNak_a
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 
@@ -63,7 +65,7 @@ wandb enabled
 
 # FDB - 1k - Custom
 mpirun --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode $NUM_PROC -np $NGPUS \
-python pretrain.py ${DATASET} \
+python pretrain.py ${DATASET} --dali \
     --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${CLS}k_${RENDER_HWD}_lr${LR}_ep${EPOCHS}_bs${BATCH_SIZE}_${STORAGE}_${EXPERIMENT} \
     --input-size 3 ${INPUT_SIZE} ${INPUT_SIZE} \
     --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5  --color-jitter 0.4 \

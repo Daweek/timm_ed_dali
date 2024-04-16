@@ -125,14 +125,19 @@ def main():
 
     # comm.Barrier()
     # Check per node to create directory to render
-    if int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0')) == 0:
-        if not os.path.exists(os.path.join(args.save_root)):
-            # print("Error: No directory to save DB")
-            # exit(0)
-            os.mkdir(os.path.join(args.save_root))
-    comm.Barrier()
-
-    print0("Rendering here: {}".format(os.path.join(args.save_root)))
+    
+    if args.tomemory:
+        print0(colored('Not saving the file to disk... only rendering to memory..','blue', 'on_black',['bold', 'blink']))
+    else:
+        if int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0')) == 0:
+            if not os.path.exists(os.path.join(args.save_root)):
+                # print("Error: No directory to save DB")
+                # exit(0)
+                os.mkdir(os.path.join(args.save_root))
+        comm.Barrier()
+        print0("Saving the images to {}".format(args.save_root))
+        print0("Rendering here: {}".format(os.path.join(args.save_root)))   
+    
 
     ####################### Initialize the library
     # Configure CPU render
@@ -153,10 +158,6 @@ def main():
     print0("\nStart the rendering loop...")
     print0(colored("Saving at {} x {} ressolution".format(args.image_res,args.image_res),'green'))
     
-    if args.tomemory:
-        print0(colored('Not saving the file to disk... only rendering to memory..','blue', 'on_black',['bold', 'blink']))
-    else:
-        print0("Saving the images to {}".format(args.save_root))    
     t  =  t1 = time.perf_counter()
 
     if args.checkpoint != 0:
@@ -171,7 +172,7 @@ def main():
     
     
     # dtset_tensor = torch.FloatTensor()
-    # dataset = []
+    dataset = []
     for csv_name in tqdm(csv_names):
         initial_time = time.perf_counter()
         name, ext = os.path.splitext(csv_name)
@@ -181,8 +182,9 @@ def main():
         if ext != '.csv': # Skip except for csv file
             continue
         #print(name)
+        if not args.tomemory:
+            make_directory(args.save_root, name) # Make directory
         
-        make_directory(args.save_root, name) # Make directory
         fractal_name=name
         fractal_weight = 0
 
@@ -223,15 +225,15 @@ def main():
 
                     if args.tomemory:
                         
-                        # membuf = BytesIO()
-                        # out_data.save(membuf, format="png")
-                        # dataset.append(membuf) 
+                        membuf = BytesIO()
+                        out_data.save(membuf, format="png")
+                        dataset.append(membuf) 
                         # print(membuf.getvalue())
                         # print(colored('\nTotal amount of bytes: {:,}'.format(membuf.__sizeof__()),'blue'))
                         # exit(0)
                         
                         # dtset_tensor = torch.cat((dtset_tensor,out_data_tensor),1)
-                        pass  
+                        # pass  
                     else:
                     # print(out_data)
                         out_data.save(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip" + str(trans_type) + ".png"),"PNG")

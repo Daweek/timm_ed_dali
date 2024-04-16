@@ -1,6 +1,6 @@
 #!/bin/bash
 #$ -cwd
-#$ -l rt_F=4
+#$ -l rt_AF=2
 #$ -l h_rt=15:00:00
 #$ -j y
 #$ -o output/$JOB_ID_pretrain_deit_tiny_pyto_fdb1k_ssd.out
@@ -25,16 +25,16 @@ export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
 
 ############# Render to local SSD
-export SSD=/local/${JOB_ID}.1.gpu
+export SSD=/local/${JOB_ID}.1.gpua
 export LOCALDIR=${SSD}
 export RENDER_HWD=files
-export DATASET=${LOCALDIR}/FractalDB1k_1k_CPUNak
+export DATASET=${LOCALDIR}/FractalDB-1000-EGL-GLFW
 
 echo "Copy and Untar..."
 
 # time cp /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB1k_1k_CPUNak.tar /beeond
 # time tar -xf ${SSD}/FractalDB1k_1k_CPUNak.tar -C /beeond
-mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 time tar -xf /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB1k_1k_CPUNak.tar -C ${SSD}
+mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 2 time tar -xf /home/acc12930pb/working/graphics/pyGL/volta_render_test_ist/data_362/FractalDB-1000-EGL-GLFW.tar -C ${SSD}
 readlink -f ${SSD}
 
 # time pv /beeond/FractalDB-1000-EGL-GLFW.tar | tar -x -C /beeond
@@ -43,7 +43,7 @@ echo "Finished copying and Untar..."
 export MASTER_ADDR=$(/usr/sbin/ip a show dev bond0 | grep inet | cut -d " " -f 6 | cut -d "/" -f 1|head -n 1)
 export MASTER_PORT=2042
 export NGPUS=16
-export NUM_PROC=4
+export NUM_PROC=8
 export PIPE=PyTo
 export STORAGE=ssd
 
@@ -55,7 +55,7 @@ export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
 
-export EXPERIMENT=CPUNak
+export EXPERIMENT=GLFW_a
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${CLS}k/pre_training
 
