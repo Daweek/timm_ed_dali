@@ -458,21 +458,30 @@ def main():
 
     print0(f"rank: {mpirank}, Finished...\n")
     print0(f"Waiting for the rest of the ranks...")
-    comm.Barrier()
+    
     
     print0('\nInformation gater from memory..')
     print0('Dataset in RAM lenght: {:,}'.format(len(dataset)))
     
+    comm.Barrier()
     
     added:int = 0
     for i, x in enumerate(dataset):
         added += x.__sizeof__()
-        # image = Image.frombytes('RGB', (g_res, g_res), x.getbuffer())
-        image = Image.open(x)
-        image.save(os.path.join(args.save_root, 'rank0' + '00000' + "_" + '0' + "_count_" + str(i) + "_flip"+ str('i') + ".png"))
+        # image = Image.open(x)
+        # image.save(os.path.join(args.save_root, str(g_mpirank) + '00000' + "_" + '0' + "_count_" + str(i) + "_flip"+ str('i') + ".png"))
         
         # print0("total images:{} bytes {:,}".format(i+1,added))
     print0('Total bytes readed from rank 0 {:,}'.format(added))
+    
+    comm.Barrier()
+    
+    # # we are gonna communicate all the ranks and their added bytes...
+    # memory_t = torch.tensor(added)
+    # gather_mem = torch.tensor(data=1)
+    gather_mem = MPI.COMM_WORLD.reduce(added, op=MPI.SUM,root=0)
+    if g_mpirank == 0:
+        print0('Total amount of data gather from MPI ranks on png dataset: {:,}'.format(int(gather_mem)))
     
     
     if args.backend == 'glfw':
