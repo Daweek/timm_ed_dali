@@ -41,7 +41,9 @@ import random
 import array
 
 from mpi4py import MPI
-comm = MPI.COMM_WORLD
+
+comm = MPI.Comm.Get_parent()
+g_universe = MPI.UNIVERSE_SIZE
 g_mpirank = comm.Get_rank()
 g_mpisize = comm.Get_size()
 
@@ -111,9 +113,22 @@ parser.add_argument('-d', '--debug', action='store_true',default=False,help='Che
 parser.add_argument('-t', '--tomemory', action='store_true',default=False,help='Do not save the image but only retain to memory')
 parser.add_argument('-l', '--local_ranks', action='store_true',default=False,help='Select if we render within the resources of only one node - Using local Ranks')
 parser.add_argument('-s', '--stats', action='store_true',default=False,help='Print some status on the RAM memory used...')
+parser.add_argument('-p','--parent_rank', default=0, type = int, help='From parents of MPIs processes')
+parser.add_argument('-w','--parent_worldsize', default=0, type = int, help='From parents of MPIs processes')
 
 def main():
     args = parser.parse_args()
+    
+    # Re-define the global ranks on the MPI word
+    global g_mpisize
+    global g_mpirank
+    g_mpirank = (int(g_mpisize)) * int(args.parent_rank) + int(comm.Get_rank())
+    g_mpisize = int(args.parent_worldsize) * g_mpisize
+    
+    # print("Local_Rank: {} ,Parent_Rank: {}, Parent_Worldsize: {} ,  Global_Rank: {}, Global_Size: {}".format(comm.Get_rank(),args.parent_rank,args.parent_worldsize,g_mpirank,g_mpisize))
+    
+    # comm.barrier()
+    
     print0("\n\nAll arguments:\n",args)
     print0("\n\n")
 
@@ -151,8 +166,8 @@ def main():
         np.random.seed(1+mpirank)
         random.seed(1+mpirank)
     else:
-        mpisize = g_mpisize
-        mpirank = g_mpirank
+        mpisize = g_mpisize 
+        mpirank = g_mpirank 
         # Set the seeds
         np.random.seed(1+mpirank)
         random.seed(1+mpirank)
@@ -162,8 +177,11 @@ def main():
     end_list = min((mpirank+1)*nlist_per_rank, nlist)
 
     csv_names = csv_names[start_list:end_list]
-    print(f"rank: {mpirank}, csv_names:{csv_names}]\n\n")
+    print0(f"rank: {mpirank}, csv_names:{csv_names}]\n\n")
     # comm.Barrier()
+    # print0("Universe MPI: {}".format(g_mpisize))
+    
+    # comm.Disconnect()
     
     # exit(0)
     
@@ -181,7 +199,7 @@ def main():
                 # print("Error: No directory to save DB")
                 # exit(0)
                 os.mkdir(os.path.join(args.save_root))
-        comm.Barrier()
+        # comm.Barrier()
         print0("Saving the images to {}".format(args.save_root))
         # print0("Rendering here: {}".format(os.path.join(args.save_root)))   
     
@@ -227,7 +245,7 @@ def main():
     print0(colored('Vendor :{}'.format( ctx.info["GL_VENDOR"]),'blue' if args.backend == 'glfw' else 'green'))
     print0(colored('GPU :{}'.format( ctx.info["GL_RENDERER"]),'blue' if args.backend == 'glfw' else 'green'))
     print0(colored('OpenGL version :{}'.format(ctx.info["GL_VERSION"]),'blue' if args.backend == 'glfw' else 'green'))    
-    comm.Barrier()
+    # comm.Barrier()
     
     if args.debug:
         print0(colored('\nDebug enabled------Checking boundaries and image sanity------','red', 'on_black',['bold', 'blink']))
@@ -432,7 +450,7 @@ def main():
                             ## Using OpenCV
                             data_np = np.frombuffer(data, dtype=np.byte)
                             data_np = data_np.reshape((362,362,3))
-                            _ , data_np = cv2.imencode('.png', data_np,[cv2.IMWRITE_PNG_COMPRESSION, 1])
+                            # _ , data_np = cv2.imencode('.png', data_np,[cv2.IMWRITE_PNG_COMPRESSION, 1])
                             dataset.append(data_np)
                             
                             # print0(data_np)
@@ -485,7 +503,7 @@ def main():
 
     print0(f"rank: {mpirank}, Finished...\n")
     print0(f"Waiting for the rest of the ranks...")
-    comm.Barrier()
+    # comm.Barrier()
     
     ## Debug on the RAM statistics
     
@@ -508,12 +526,12 @@ def main():
         # print0("total images:{} bytes {:,}".format(i+1,added))
         # print0('Total bytes readed from rank 0 {:,}'.format(added))
         
-        comm.Barrier()
+        # comm.Barrier()
         
         print("Total Bytes from rank {} is {:,}".format(g_mpirank,added))
         
         
-        comm.Barrier()
+        # comm.Barrier()
         # # we are gonna communicate all the ranks and their added bytes...
         # memory_t = torch.tensor(added)
         # gather_mem = torch.tensor(data=1)
@@ -534,7 +552,7 @@ def main():
     print0("Rendering using GPU-EGL Finished...")
     ctx.finish()
 
-    # MPI.Finalize()
+    comm.Disconnect()
    
 
 if __name__ == "__main__":
