@@ -234,7 +234,8 @@ def main():
                     _imgs:torch.LongTensor = None
                     _imgs= fr.render(pts,width,height,patch_mode, flip_flg, pointgen_seed)
                     # time.sleep(1)
-                    out_data_tensor = _imgs[0].permute(2,0,1) #chw
+                    # out_data_tensor = _imgs[0].permute(2,0,1) #chw
+                    out_data_tensor = _imgs[0]
                     # out_data = transforms.ToPILImage()(out_data_tensor.squeeze_(0))
 
                     if args.tomemory:
@@ -244,9 +245,8 @@ def main():
                         # dataset.append(membuf) 
                         
                         ## Using OpenCV
-                        data_np = np.frombuffer(out_data_tensor, dtype=np.byte)
-                        data_np = data_np.reshape((362,362,3))
-                        # _ , data_np = cv2.imencode('.png', data_np,[cv2.IMWRITE_PNG_COMPRESSION, 1])
+                        data_np = out_data_tensor.numpy()
+                        _ , data_np = cv2.imencode('.png', data_np,[cv2.IMWRITE_PNG_COMPRESSION, 1])
                         dataset.append(data_np)
                         
                         
@@ -265,7 +265,6 @@ def main():
                     
                     ## Using OPenCV
                         data_np = out_data_tensor.numpy()
-                        data_np = data_np.reshape((362,362,3))
                         cv2.imwrite(os.path.join(args.save_root, fractal_name, fractal_name + "_" + fractal_weight_count + "_count_" + str(count) + "_flip"+ str(trans_type) + ".png"),data_np,[cv2.IMWRITE_PNG_COMPRESSION, 1])
                     
             fractal_weight += 1
