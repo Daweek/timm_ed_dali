@@ -124,13 +124,16 @@ def main():
     global g_mpirank
     g_mpirank = (int(g_mpisize)) * int(args.parent_rank) + int(comm.Get_rank())
     g_mpisize = int(args.parent_worldsize) * g_mpisize
+    n_nodes = int(args.parent_worldsize) // args.ngpus_pernode
     
-    # print("Local_Rank: {} ,Parent_Rank: {}, Parent_Worldsize: {} ,  Global_Rank: {}, Global_Size: {}".format(comm.Get_rank(),args.parent_rank,args.parent_worldsize,g_mpirank,g_mpisize))
+    print0("Local_Rank: {} ,Parent_Rank: {}, Parent_Worldsize: {} ,  Global_Rank: {}, Global_Size: {}, N_nodes: {}".format(comm.Get_rank(),args.parent_rank,args.parent_worldsize,g_mpirank,g_mpisize,n_nodes))
     
     # comm.barrier()
     
     print0("\n\nAll arguments:\n",args)
     print0("\n\n")
+
+    
 
     # Parse the backend
     if not (args.backend == 'glfw' or args.backend == 'egl'):
@@ -171,13 +174,42 @@ def main():
         # Set the seeds
         np.random.seed(1+mpirank)
         random.seed(1+mpirank)
+        
+    ## Original to divide whole MPI to attack whole task
+    # nlist_per_rank = (nlist+mpisize-1)//mpisize
+    # start_list = mpirank*nlist_per_rank
+    # end_list = min((mpirank+1)*nlist_per_rank, nlist)
     
-    nlist_per_rank = (nlist+mpisize-1)//mpisize
-    start_list = mpirank*nlist_per_rank
-    end_list = min((mpirank+1)*nlist_per_rank, nlist)
+    
+
+    nlist_per_node = nlist//n_nodes
+    node = int(args.parent_rank) // args.ngpus_pernode
+    l_gpu = int(args.parent_rank) % args.ngpus_pernode
+    l_rank = l_gpu * comm.Get_size() + comm.Get_rank()
+    
+    l_mpisize = comm.Get_size() * args.ngpus_pernode
+    
+    nlist_per_rank = (nlist_per_node+l_mpisize-1) // l_mpisize
+    
+    start_list = (l_rank) * nlist_per_rank + (nlist_per_node * node)
+    # start_list = (mpirank) * nlist_per_rank + (nlist_per_node * node)
+    
+    
+    end_list = min((l_rank+1) * nlist_per_rank + (nlist_per_node * node), nlist_per_node * (node+1) )
+    # end_list = min((mpirank+1) * nlist_per_rank, nlist_per_node * (node+1) )
+    # end_list = min((mpirank+1)*nlist_per_rank, nlist)
+    
+    
+    print0("Node: {},L_Rank: {},L_GPU: {}, NList_prnode: {}, NList_prank:{}".format(node,l_rank,l_gpu,nlist_per_node,nlist_per_rank))
 
     csv_names = csv_names[start_list:end_list]
-    print0(f"rank: {mpirank}, csv_names:{csv_names}]\n\n")
+    print(f"U_rank: {mpirank}, Node: {node}, L_Rank:{l_rank} , csv_names:{csv_names}]\n\n")
+    
+    
+    # comm.Disconnect()
+    # exit(0)
+    
+    
     # comm.Barrier()
     # print0("Universe MPI: {}".format(g_mpisize))
     

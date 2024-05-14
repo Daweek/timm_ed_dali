@@ -31,13 +31,32 @@ def main():
     # print0(SSD)
     # print0("Rank: {}".format(g_mpirank))
     
-    # new_comm = MPI.COMM_SELF.Spawn(sys.executable, 
-    #                                args=['spawn_mpi_gpu_ramtest.py', '--load_root', 'csv/searched_params/csv_rate0.2_category1000_points200000','--save_root',SSD +'/fdb1000_spawn','-p',str(g_mpirank),'-w',str(g_mpisize)], 
-    #                                maxprocs=int(args.mpi_spawn))
+    ## Create the main directory with rank 0 to avoid threads race:
+    save_root = SSD + '/fdb1000_GPU_spawn_egl'
+    if g_mpirank % 4 == 0:
+        if not os.path.exists(os.path.join(save_root)):
+            os.mkdir(os.path.join(save_root))
+       
+    comm.barrier()    
     
+    ## Set the host-file 
+    
+    mpi_info = MPI.Info.Create()
+    host = MPI.Get_processor_name()
+    # print(host)
+    mpi_info.Set('host',host)
+    
+    ## For GPU
     new_comm = MPI.COMM_SELF.Spawn(sys.executable, 
-                                   args=['spawn_mpi_cpu_ramtest.py', '--load_root', 'csv/searched_params/csv_rate0.2_category1000_points200000','--save_root',SSD +'/fdb1000_CPU_spawn','-p',str(g_mpirank),'-w',str(g_mpisize)], 
-                                   maxprocs=int(args.mpi_spawn))
+                                   args=['spawn_mpi_gpu_ramtest.py', '--load_root', 'csv/searched_params/csv_rate0.2_category1000_points200000','-g','4','--save_root',SSD + '/fdb1000_GPU_spawn','-p',str(g_mpirank),'-w',str(g_mpisize)], 
+                                   maxprocs=int(args.mpi_spawn),
+                                   info=mpi_info)
+    
+    ## For CPU
+    # new_comm = MPI.COMM_SELF.Spawn(sys.executable, 
+    #                                args=['spawn_mpi_cpu_ramtest.py', '--load_root', 'csv/searched_params/csv_rate0.2_category1000_points200000','--save_root',SSD + '/fdb1000_CPU_spawn','-p',str(g_mpirank),'-w',str(g_mpisize)], 
+    #                                maxprocs=int(args.mpi_spawn),
+    #                                info=mpi_info)
     
     # new_comm.barrier()
     

@@ -109,6 +109,8 @@ def main():
     nlist = len(csv_names)
     print0(f"\n\nNumber of Classes found in csv files {nlist}")
     
+    # Counting nodes:
+    
     # Select if we render within the resources of only one node - Using local Ranks
     
     if args.local_ranks:
@@ -248,9 +250,7 @@ def main():
                         data_np = out_data_tensor.numpy()
                         _ , data_np = cv2.imencode('.png', data_np,[cv2.IMWRITE_PNG_COMPRESSION, 1])
                         dataset.append(data_np)
-                        
-                        
-                        
+
                         # print(membuf.getvalue())
                         # print(colored('\nTotal amount of bytes: {:,}'.format(membuf.__sizeof__()),'blue'))
                         # exit(0)
