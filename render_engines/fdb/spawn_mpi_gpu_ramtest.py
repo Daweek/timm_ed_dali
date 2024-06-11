@@ -43,6 +43,7 @@ import array
 from mpi4py import MPI
 
 comm = MPI.Comm.Get_parent()
+comm_u = MPI.COMM_WORLD
 g_universe = MPI.UNIVERSE_SIZE
 g_mpirank = comm.Get_rank()
 g_mpisize = comm.Get_size()
@@ -128,8 +129,14 @@ def main():
     
     print0("Local_Rank: {} ,Parent_Rank: {}, Parent_Worldsize: {} ,  Global_Rank: {}, Global_Size: {}, N_nodes: {}".format(comm.Get_rank(),args.parent_rank,args.parent_worldsize,g_mpirank,g_mpisize,n_nodes))
     
-    # comm.barrier()
     
+    # From MPI communicators
+    print0("Parent_Rank:{}, Parent_Size: {}, Universe: {}, CommW_Rank: {}, CommW_Size: {}".format(comm.Get_rank(),comm.Get_size(),g_universe, comm_u.Get_rank(),comm_u.Get_size()))
+    
+    
+    # comm_u.barrier()
+    
+     
     print0("\n\nAll arguments:\n",args)
     print0("\n\n")
 
@@ -179,8 +186,7 @@ def main():
     # nlist_per_rank = (nlist+mpisize-1)//mpisize
     # start_list = mpirank*nlist_per_rank
     # end_list = min((mpirank+1)*nlist_per_rank, nlist)
-    
-    
+      
 
     nlist_per_node = nlist//n_nodes
     node = int(args.parent_rank) // args.ngpus_pernode
@@ -203,7 +209,7 @@ def main():
     print0("Node: {},L_Rank: {},L_GPU: {}, NList_prnode: {}, NList_prank:{}".format(node,l_rank,l_gpu,nlist_per_node,nlist_per_rank))
 
     csv_names = csv_names[start_list:end_list]
-    print(f"U_rank: {mpirank}, Node: {node}, L_Rank:{l_rank} , csv_names:{csv_names}]\n\n")
+    print0(f"U_rank: {mpirank}, Node: {node}, L_Rank:{l_rank} , csv_names:{csv_names}]\n\n")
     
     
     # comm.Disconnect()
@@ -482,7 +488,7 @@ def main():
                             ## Using OpenCV
                             data_np = np.frombuffer(data, dtype=np.byte)
                             data_np = data_np.reshape((362,362,3))
-                            # _ , data_np = cv2.imencode('.png', data_np,[cv2.IMWRITE_PNG_COMPRESSION, 1])
+                            _ , data_np = cv2.imencode('.png', data_np,[cv2.IMWRITE_PNG_COMPRESSION, 1])
                             dataset.append(data_np)
                             
                             # print0(data_np)
@@ -535,6 +541,7 @@ def main():
 
     print0(f"rank: {mpirank}, Finished...\n")
     print0(f"Waiting for the rest of the ranks...")
+    comm_u.barrier()
     # comm.Barrier()
     
     ## Debug on the RAM statistics
@@ -543,7 +550,7 @@ def main():
         print0('\nInformation gater from memory..')
         print0('Number of items on Dataset in RAM lenght: {:,}'.format(len(dataset)))
         
-        # comm.Barrier()
+        comm_u.barrier()
         
         added:int = 0
         for i, x in enumerate(dataset):
@@ -560,7 +567,7 @@ def main():
         
         # comm.Barrier()
         
-        print("Total Bytes from rank {} is {:,}".format(g_mpirank,added))
+        print0("Total Bytes from rank {} is {:,}".format(g_mpirank,added))
         
         
         # comm.Barrier()
@@ -568,8 +575,13 @@ def main():
         # memory_t = torch.tensor(added)
         # gather_mem = torch.tensor(data=1)
         gather_mem = MPI.COMM_WORLD.reduce(added, op=MPI.SUM,root=0)
-        if g_mpirank == 0:
-            print0('Total amount of data gather from MPI ranks on png dataset: {:,}'.format(int(gather_mem)))
+        
+        # gather_mem = comm.reduce(added, op=MPI.SUM,root=0)
+        
+        if gather_mem is None:
+            pass
+        else:
+            print('Total amount of data gather from MPI on global rank: {}  dataset: {:,} Bytes'.format(g_mpirank,int(gather_mem)))
     
     
     if args.backend == 'glfw':
