@@ -30,7 +30,7 @@ def create_dali_pipeline_TrainAug(external_render,data_dir, crop, size, shard_id
         images, labels = fn.readers.file(file_root=data_dir,
                                         shard_id=shard_id,
                                         num_shards=num_shards,
-                                        prefetch_queue_depth = 4,
+                                        prefetch_queue_depth = 2,
                                         random_shuffle=True,
                                         pad_last_batch=True,
                                         # shuffle_after_epoch=True,

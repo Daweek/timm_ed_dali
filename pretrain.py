@@ -51,6 +51,8 @@ mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
 # from oneInstance import OneInstance_Imnet
 
+from benchmarks.Fractal2D import Fractal2D_cpu, worker_init_fdb_fn
+
 def seed_worker(rank):
     worker_seed = torch.initial_seed() + rank
     np.random.seed(worker_seed)
@@ -304,8 +306,32 @@ parser.add_argument('--imnet-oneinstance', action='store_true', default=False,
 #DALI pipeline
 parser.add_argument('--dali', action='store_true', default=False,
                     help='Using DALI pipeline')
+parser.add_argument('--dali-cpu', action='store_true', default=False,
+                    help='Using DALI on CPU')
 parser.add_argument('--dgpu', action='store_true', default=False,
                     help='Using DALI pipeline')
+
+## For render to RAM
+parser.add_argument('--render-type', default="none", type = str, help='{cpu or gpu}')
+parser.add_argument('--render-fdb', action='store_true', default=False,
+                    help='Using CPU based real-time render to create FDB dataset.')
+parser.add_argument('--render-oneinstance', action='store_true', default=False,
+                    help='Using CPU based real-time render to create FDB dataset.')                    
+parser.add_argument('--render-mvfdb', action='store_true', default=False,
+                    help='Using CPU/GPU based real-time render to create MVF dataset.')
+parser.add_argument('--csv', default=None, 
+                    help='path/URL for CSV path://')
+parser.add_argument('--render-size', type=int, default=362, metavar='N',
+                    help='Image patch size (default: None => model default)')
+parser.add_argument('--render-countpatch', type=int, default=1, metavar='N',
+                    help='Image patch size (default: None => model default)')
+parser.add_argument('--render-patchmode', type=int, default=0, metavar='N',
+                    help='Image patch size (default: None => model default)')
+parser.add_argument('--instance', default=10, type = int, help='#instance, 10 => 1000 instance, 100 => 10,000 instance per category')
+parser.add_argument('--rotation', default=4, type = int, help='Flip per category')
+parser.add_argument('--nweights', default=25, type = int, help='Transformation of each weights. Original DB is 25 from csv files')
+parser.add_argument('--ram-batch', action='store_true', default=False,
+                    help='Experiment to read from RAM...')
 
 def _parse_args():
     args = parser.parse_args()
@@ -318,6 +344,9 @@ def _parse_args():
 def main():
     setup_default_logging()
     args, args_text = _parse_args()
+   
+    print0("\n\nAll arguments:\n",args)
+    print0("\n\n")   
 
     args.prefetcher = not args.no_prefetcher
     args.distributed = int(os.getenv('OMPI_COMM_WORLD_SIZE', '1')) > 1
@@ -596,7 +625,7 @@ def main():
                                     data_dir=dataset_root,
                                     crop=args.input_size[1] ,
                                     size=362,
-                                    dali_cpu=False,
+                                    dali_cpu=args.dali_cpu,
                                     shard_id=args.rank,
                                     num_shards=args.world_size,
                                     is_training=True,
@@ -622,6 +651,18 @@ def main():
             print0("\n\n=> Loading DataSet with Imnet-1instances per Class")
             # dataset_train = OneInstance_Imnet(root=args.data_dir)
 
+        elif args.render_type == "cpu":
+            print0("===> CPU -- FDB_render ....")
+            print0("Loading from:{}".format(args.csv))
+            print0("Render-size:{}".format(args.render_size))
+            csv_names = os.listdir(args.csv)
+            csv_names.sort()            
+            nlist = len(csv_names)
+            print0(f"\n\nNumber of Classes found in csv files {nlist}")
+            
+            dataset_train = Fractal2D_cpu(root=args.csv, width = args.render_size, height = args.render_size, npts = 200000, patch_mode = args.render_patchmode, patch_num = args.instance, patchgen_seed = 100, pointgen_seed = 100,oneinstance = args.render_oneinstance, countpatch =  args.render_countpatch, ram = args.ram_batch,batch=args.batch_size)
+            
+            w_i_fn = worker_init_fdb_fn
         else:
             # create datasets with timm's dataloader
             dataset_train = create_dataset(
@@ -629,6 +670,7 @@ def main():
                 root=args.data_dir, split=args.train_split, is_training=True,
                 batch_size=args.batch_size, repeats=args.epoch_repeats)
 
+            w_i_fn = None
         # setup mixup / cutmix
         collate_fn = None
         mixup_fn = None
@@ -678,7 +720,7 @@ def main():
             collate_fn=collate_fn,
             pin_memory=args.pin_mem,
             repeated_aug=args.repeated_aug,
-            worker_init_fn=None,
+            worker_init_fn=w_i_fn,
             persistent_workers=True,
         )
         

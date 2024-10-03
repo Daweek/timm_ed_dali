@@ -10,16 +10,18 @@ cat $JOB_SCRIPT
 echo "..................................................................................................."
 echo "JOB ID: ---- >>>>>>   $JOB_ID"
 # ======== Modules ========
-source /etc/profile.d/modules.sh
+. /etc/profile.d/modules.sh
 module purge
-module load cuda/12.2/12.2.0 cudnn/8.9/8.9.2 nccl/2.18/2.18.5-1 gcc/12.2.0 cmake/3.26.1 hpcx-mt/2.12
+module load gcc/13.2.0 cmake/3.29.0
+module load hpcx-mt/2.12
+module load cuda/12.4/12.4.1 cudnn/9.2/9.2.1 nccl/2.22/2.22.3-1 
 
 # ======== Pyenv/ ========
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
-pyenv local torch_21_3117
+pyenv local torch_240_3124
 
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
@@ -32,13 +34,13 @@ export NUM_PROC=4
 export PIPE=PyTo
 
 # ========= For experiment and pre-train
-export RENDER_HWD=cpu
+export RENDER_HWD=files
 export PRE_STORAGE=ssd
 export MODEL=tiny
-export PRE_CLS=1
+export PRE_CLS=0
 export PRE_LR=1.0e-3
-export PRE_EPOCHS=300
-export PRE_BATCH=512
+export PRE_EPOCHS=0
+export PRE_BATCH=0
 
 export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
@@ -51,16 +53,17 @@ export SSD=/local/${JOB_ID}.1.gpu
 export PRE_JOB_ID=41943431
 export PRE_EXPERIMENT=localShuf_0
 
-export EXPERIMENT=localShuf_0
+export EXPERIMENT=Ep300
+
 # For Timm scripts...
 # export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/checkpoint/tiny/fdb1k/pre_training/pretrain_deit_tiny_fdb1k_lr1.0e-3_epochs300_bs512_ssd_362x_GLFW3090/last.pth.tar  #----->>>>> best so far... 86.72
 
-export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/${PRE_JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${PRE_EXPERIMENT}/last.pth.tar
+# export CP_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/pre_training/${PRE_JOB_ID}_pret_deit_${PIPE}_${MODEL}_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_ep${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${PRE_EXPERIMENT}/last.pth.tar
 
 export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MODEL}/fdb${PRE_CLS}k/fine_tuning
 
 echo "Copy and Untar..."
-mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 time tar -xf /home/acc12930pb/scratch/datasets/${DATASET_NAME}.tar -C ${SSD}
+mpirun --display-map --display-allocation --bind-to none -machinefile $SGE_JOB_HOSTLIST -npernode 1 -np 4 time tar -xf /home/acc12930pb/working/datasets/${DATASET_NAME}.tar -C ${SSD}
 readlink -f ${SSD}
 echo "Finished copying and Untar..."
 
@@ -83,7 +86,7 @@ python finetune.py ${SSD}/${DATASET_NAME} \
     --amp \
     --log-wandb \
     --pin-mem \
-    --pretrained-path ${CP_DIR}
+    # --pretrained-path ${CP_DIR}
 
 echo "Compute Finished..."
 ################################################################

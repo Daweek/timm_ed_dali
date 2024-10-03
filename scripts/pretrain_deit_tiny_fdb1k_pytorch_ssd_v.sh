@@ -12,7 +12,7 @@ echo "JOB ID: ---- >>>>>>   $JOB_ID"
 # ======== Modules ========
 source /etc/profile.d/modules.sh
 module purge
-module load cuda/12.4/12.4.0 cudnn/9.0/9.0.0 nccl/2.20/2.20.5-1 gcc/13.2.0 cmake/3.29.0 hpcx-mt/2.12
+module load cuda/12.4/12.4.0 cudnn/9.1/9.1.1 nccl/2.21/2.21.5-1 gcc/13.2.0 cmake/3.29.0 hpcx-mt/2.12
 
 # ======== Pyenv/ ========
 export PYENV_ROOT="$HOME/.pyenv"
@@ -50,7 +50,7 @@ export STORAGE=ssd
 export MODEL=tiny
 export LR=1.0e-3
 export CLS=1
-export EPOCHS=300
+export EPOCHS=10
 export LOCAL_BATCH_SIZE=32
 export BATCH_SIZE=$(($NGPUS*$LOCAL_BATCH_SIZE))
 export INPUT_SIZE=224
@@ -77,7 +77,7 @@ python pretrain.py ${DATASET} \
     --num-classes ${CLS}000 --eval-metric loss \
     --interval-saved-epochs 100 --output ${OUT_DIR} \
     --no-prefetcher --amp \
-    --log-wandb \
+    # --log-wandb \
 
 echo "                   "
 echo "                   "

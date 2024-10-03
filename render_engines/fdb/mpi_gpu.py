@@ -28,11 +28,11 @@ import glm as glm
 import struct
 from PIL import Image
 import moderngl
-import pycuda.driver as cuda_driver
-import pycuda.gl as cuda_gl
+# import pycuda.driver as cuda_driver
+# import pycuda.gl as cuda_gl
 # import pycuda.gl.autoinit
-import pycuda.gpuarray as cuda_array
-from pycuda.compiler import SourceModule
+# import pycuda.gpuarray as cuda_array
+# from pycuda.compiler import SourceModule
 import numpy as np
 import cupy as cp
 
@@ -93,7 +93,7 @@ def key_event(window,key,scancode,action,mods):
 
 parser = argparse.ArgumentParser(description='PyTorch fractal make FractalDB')
 parser.add_argument('--load_root', default='./csv/data1k_fromPython/csv_rate0.2_category1000', type = str, help='load csv root')
-parser.add_argument('--save_root', default='./bake_db/test', type = str, help='save png root')
+parser.add_argument('--save_root', default='./ssd/fdb1k', type = str, help='save png root')
 parser.add_argument('--image_size_x', default=362, type = int, help='image size x')
 parser.add_argument('--image_size_y', default=362, type = int, help='image size y')
 parser.add_argument('--image_res', default=362, type = int, help='image size y')

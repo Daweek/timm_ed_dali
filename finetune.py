@@ -286,6 +286,8 @@ parser.add_argument('--group-name', default='finetune', type=str,
 #DALI pipeline
 parser.add_argument('--dali', action='store_true', default=False,
                     help='Using DALI pipeline')
+parser.add_argument('--dali-cpu', action='store_true', default=False,
+                    help='Using DALI on CPU')
 parser.add_argument('--dgpu', action='store_true', default=False,
                     help='Using DALI pipeline')
 
@@ -300,6 +302,8 @@ def _parse_args():
 def main():
     setup_default_logging()
     args, args_text = _parse_args()
+    
+  
     
     # Check Color Jitter
     if args.color_jitter == 0.0:
@@ -330,6 +334,9 @@ def main():
     else:
         _logger.info('Training with a single process on 1 GPUs.')
     assert args.rank >= 0
+
+    print0("\n\nAll arguments:\n",args)
+    print0("\n\n") 
 
     # resolve AMP arguments based on PyTorch / Apex availability
     use_amp = None
@@ -497,7 +504,7 @@ def main():
                                     data_dir=dataset_root,
                                     crop=224,
                                     size=224,
-                                    dali_cpu=False,
+                                    dali_cpu=args.dali_cpu,
                                     shard_id=args.rank,
                                     num_shards=args.world_size,
                                     gpu_render=args.dgpu,

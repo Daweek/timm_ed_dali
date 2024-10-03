@@ -327,6 +327,8 @@ def _parse_args():
 def main():
     setup_default_logging()
     args, args_text = _parse_args()
+    print0("\n\nAll arguments:\n",args)
+    print0("\n\n")   
 
     args.prefetcher = not args.no_prefetcher
     args.distributed = int(os.getenv('OMPI_COMM_WORLD_SIZE', '1')) > 1

@@ -60,7 +60,7 @@ def make_directory(save_root, name):
 
 parser = argparse.ArgumentParser(description='PyTorch fractal make FractalDB')
 parser.add_argument('--load_root', default='./csv/data1k_fromPython/csv_rate0.2_category1000', type = str, help='load csv root')
-parser.add_argument('--save_root', default='./bake_db/testCPU', type = str, help='save png root')
+parser.add_argument('--save_root', default='./ssd/testCPU', type = str, help='save png root')
 parser.add_argument('--image_size_x', default=362, type = int, help='image size x')
 parser.add_argument('--image_size_y', default=362, type = int, help='image size y')
 parser.add_argument('--image_res', default=362, type = int, help='image size y')
@@ -269,8 +269,6 @@ def main():
     print0(colored("\n\n\tTotal experiment time: {:.4f} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'red'))
     
     print0("Rendering using CPU Finished...")
-
-   
 
 if __name__ == "__main__":
     main()
