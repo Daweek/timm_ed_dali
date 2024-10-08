@@ -242,8 +242,7 @@ def main():
     print("WorldSize {}  rank {} -> Ready".format(world_size, rank))
     dist.barrier()
       
-    train_transform = transforms.Compose([transforms.Resize(364),
-                                          transforms.RandomCrop(224),
+    train_transform = transforms.Compose([transforms.RandomCrop(224),
                                           transforms.RandomHorizontalFlip(0.5),
                                           transforms.ToTensor(),
                                           transforms.Normalize(mean=[0.485 * 255,0.456 * 255,0.406 * 255],
@@ -426,16 +425,35 @@ def main():
         
     
     else:
-        print0(colored("===<<<< Loading files from PyTorch...",terminal_clr))
-        print0("Loading from:{}".format(args.root))
+        print0(colored("===<<<< Loading files from PyTorch...",terminal_clr))      
+        
+        if rank == 0:
+            args.root = "ssd/fdb10_egl"
+        elif rank == 1:
+            args.root = "ssd/fdb10_b_egl"
+        else:
+            pass
+        
+        print("Loading from:{}".format(args.root))
         t0 = time.perf_counter()
+        
         
         train_dataset = datasets.ImageFolder(args.root,transform=train_transform)
         # print(train_dataset.imgs)
+        # print(train_dataset.classes)
+        print(train_dataset.class_to_idx)
         
-        train_sampler = torch_data_distributed.DistributedSampler(train_dataset,num_replicas=1,rank=rank)
+        dist.barrier()
+        
+        print("Custom Folder to get class_idx from the folder name")
+        
+        train_local = ImageFolderNumber_To_Idx(args.root,transform=train_transform)
+        print(train_local.class_to_idx)
 
-        train_loader = DataLoader(dataset=train_dataset,
+        
+        train_sampler = torch_data_distributed.DistributedSampler(train_dataset,num_replicas=world_size,rank=rank)
+
+        train_loader = torch_data.DataLoader(dataset=train_dataset,
                                                     batch_size=args.batch_size,
                                                     sampler=train_sampler,
                                                     num_workers=args.workers,
@@ -445,9 +463,9 @@ def main():
                                                     )
         t1 = time.perf_counter()
         
-        print0("Dataset length: {:,} total images".format(len(train_dataset)))
-        print0("Batches per Rank to be processed: {:,} total batches".format(len(train_loader)))
-        print0("Time to load categories:{} seconds\n".format(t1-t0))
+        print("Dataset length: {:,} total images".format(len(train_dataset)))
+        print("Batches per Rank to be processed: {:,} total batches".format(len(train_loader)))
+        print("Time to load categories:{} seconds\n".format(t1-t0))
 
  
     model = None

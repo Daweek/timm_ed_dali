@@ -251,7 +251,8 @@ def main():
     
     
 
-    train_transform = transforms.Compose([transforms.RandomCrop(224),
+    train_transform = transforms.Compose([transforms.Resize(364),
+                                          transforms.RandomCrop(224),
                                           transforms.RandomHorizontalFlip(0.5),
                                           transforms.ToTensor(),
                                           transforms.Normalize(mean=[0.485 * 255,0.456 * 255,0.406 * 255],
