@@ -1,4 +1,8 @@
 *.[__pycache__]
+*[output]
+*.python-version
+*nfs
+*ssd
 /.ssd
 /.ssdb
 /.ssd_v

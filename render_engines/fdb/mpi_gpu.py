@@ -454,18 +454,18 @@ def main():
     print0(f"Waiting for the rest of the ranks...")
     comm.Barrier()
     
-    print0('\nInformation gater from memory..')
-    print0('Dataset in RAM lenght: {:,}'.format(len(dataset)))
+    # print0('\nInformation gater from memory..')
+    # print0('Dataset in RAM lenght: {:,}'.format(len(dataset)))
     
     
-    added:int = 0
-    for i, x in enumerate(dataset):
-        added += x.__sizeof__()
-        image = Image.frombytes('RGB', (g_res, g_res), x)
-        image.save(os.path.join(args.save_root, 'rank0', '00000' + "_" + '0' + "_count_" + str(i) + "_flip"+ str('i') + ".png"))
+    # added:int = 0
+    # for i, x in enumerate(dataset):
+    #     added += x.__sizeof__()
+    #     image = Image.frombytes('RGB', (g_res, g_res), x)
+    #     image.save(os.path.join(args.save_root, 'rank0', '00000' + "_" + '0' + "_count_" + str(i) + "_flip"+ str('i') + ".png"))
         
-        # print0("total images:{} bytes {:,}".format(i+1,added))
-    print0('Total bytes readed from rank 0 {:,}'.format(added))
+    #     # print0("total images:{} bytes {:,}".format(i+1,added))
+    # print0('Total bytes readed from rank 0 {:,}'.format(added))
     
     
     if args.backend == 'glfw':
@@ -480,3 +480,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # print0(total_time)
