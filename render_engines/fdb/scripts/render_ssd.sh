@@ -6,25 +6,25 @@
 #$ -cwd
 #$ -N fdb_render
 
-cat $JOB_SCRIPT
+# cat $JOB_SCRIPT
 echo "................................................................................"
 echo "JOB ID: ---- >>>>>>   $JOB_ID"
 
 # ======== Modules ========
-# source /etc/profile.d/modules.sh
-# module purge
-# module load cuda/12.4/12.4.0 cudnn/9.1/9.1.1 nccl/2.21/2.21.5-1 gcc/13.2.0 cmake/3.29.0 hpcx-mt/2.12
+source /etc/profile.d/modules.sh
+module purge
+module load cuda/12.4/12.4.0 cudnn/9.1/9.1.1 nccl/2.21/2.21.5-1 gcc/13.2.0 cmake/3.29.0 hpcx-mt/2.12
 
-# # ======== Pyenv/ ========
-# export PYENV_ROOT="$HOME/.pyenv"
-# export PATH="$PYENV_ROOT/bin:$PATH"
-# eval "$(pyenv init --path)"
-# eval "$(pyenv virtualenv-init -)"
+# ======== Pyenv/ ========
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv virtualenv-init -)"
 
-# pyenv local torch_240_3124
+pyenv local anaconda3-2023.07-2/envs/ffcv
 
-# export PYTHONUNBUFFERED=1
-# export PYTHONWARNINGS="ignore"
+export PYTHONUNBUFFERED=1
+export PYTHONWARNINGS="ignore"
 
 convert_milliseconds() {
     local total_ms=$1
@@ -48,7 +48,7 @@ convert_milliseconds() {
 global_start=$(date +%s%3N)
 # Experiments parameters
 size=(32 64 128 256 512 1024)
-# size=(32 64)
+# size=(32)
 
 # NFS network_________________
 #root=nfs/raw
@@ -73,7 +73,8 @@ do
     start_time=$(date +%s%3N)
 
     # Render to somewhere
-    mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -np 80 python mpi_gpu.py --ngpus-pernode 4 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x 
+    # mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -np 80 python mpi_gpu.py --ngpus-pernode 4 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x 
+    mpirun --bind-to socket --use-hwthread-cpus -np 80 python mpi_gpu.py --ngpus-pernode 4 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
     
     #--instance 10 --rotation 1 --nweights 1
 
@@ -82,7 +83,12 @@ do
     times+=("$total_duration")
 
     du -sh ${root}/fdb1k_${imsize}x_egl
+
+    echo "Number of images generated:"
+    find ${root}/fdb1k_${imsize}x_egl -type f -print |wc -l | xargs printf "%'d\n"
     
+    echo "This experiment Duration: ${imsize}x${imsize} "
+    convert_milliseconds "$total_duration"
     echo "______Finish_________"
     echo "                   "
 done

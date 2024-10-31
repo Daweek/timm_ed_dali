@@ -1,15 +1,6 @@
 *.[__pycache__]
 *[output]
 
-*nfs
-*ssd
-/.ssd
-/.ssdb
-/.ssd_v
-/.python-version
-
-ssd
-ssdb
 
 /checkpoint
 /datasets

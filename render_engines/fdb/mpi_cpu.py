@@ -2,7 +2,7 @@ from ctypes import LittleEndianStructure
 import os
 import sys
 here = os.getcwd()
-sys.path.insert(1,here+"/ed_fractal2d_cpu/build/lib.linux-x86_64-cpython-312")
+sys.path.insert(1,here+"/ed_fractal2d_cpu/build/lib.linux-x86_64-cpython-311")
 
 from tqdm import tqdm
 # import moderngl as ModernGL

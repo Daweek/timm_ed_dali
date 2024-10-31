@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 import torchvision.utils
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
+from torchvision import datasets,transforms
 
 from timm.data import create_dataset, resolve_data_config, Mixup, FastCollateMixup, AugMixDataset
 from timm.models import resume_checkpoint, model_parameters
@@ -33,8 +34,21 @@ from timm.optim import create_optimizer_v2, optimizer_kwargs
 from timm.utils import ApexScaler, NativeScaler
 
 import webdataset as wds
+
+from typing import List
+from ffcv.fields import IntField, RGBImageField
+from ffcv.fields.decoders import IntDecoder, SimpleRGBImageDecoder, RandomResizedCropRGBImageDecoder
+from ffcv.loader import Loader, OrderOption
+from ffcv.pipeline.operation import Operation
+from ffcv.transforms import RandomHorizontalFlip, Cutout, \
+    RandomTranslate, Convert, ToDevice, ToTensor, ToTorchImage
+from ffcv.transforms.common import Squeeze
+from ffcv.writer import DatasetWriter
+
 import torch.distributed as dist
 
+import sys
+sys.path.insert(0,'../')
 from myloader.loader import create_loader, create_transform_webdataset
 from models.factory import create_model, safe_model_name
 from scheduler.scheduler_factory import create_scheduler
@@ -43,9 +57,6 @@ from utils.summary import original_update_summary
 from nvidia.dali.plugin.pytorch import DALIClassificationIterator, LastBatchPolicy
 from dali.pipe_train import create_dali_pipeline_TrainAug
 
-# Experiments with local shuffle and portion of the whole dataset to SSD
-from myfolder.FolderNumberToIdx import ImageFolderNumber_To_Idx
-
 from termcolor import colored
 # from oneInstance import OneInstance_Imnet
 from mpi4py import MPI
@@ -53,6 +64,8 @@ comm = MPI.COMM_WORLD
 mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
 # from oneInstance import OneInstance_Imnet
+
+# from benchmarks.Fractal2D import Fractal2D_cpu, worker_init_fdb_fn
 
 def seed_worker(rank):
     worker_seed = torch.initial_seed() + rank
@@ -102,7 +115,7 @@ _logger = logging.getLogger('train')
 parser = argparse.ArgumentParser(description='PreTraining')
 
 # Dataset / Model parameters
-parser.add_argument('data_dir', metavar='DIR',
+parser.add_argument('--data-dir', metavar='DIR',
                     help='path to dataset, do not used when using WebDataSet')
 parser.add_argument('--dataset', '-d', metavar='NAME', default='',
                     help='dataset type (default: ImageFolder/ImageTar if empty)')
@@ -132,14 +145,6 @@ parser.add_argument('--interpolation', default='', type=str, metavar='NAME',
                     help='Image resize interpolation type (overrides model)')
 parser.add_argument('-b', '--batch-size', type=int, default=32, metavar='N',
                     help='input batch size for training (default: 32)')
-
-# Web Datasets
-parser.add_argument('--trainshards', default=None,
-                    help='path/URL for ImageNet shards')
-parser.add_argument('-w', '--webdataset', action='store_true', default=False,
-                    help='Using webdata to create DataSet from .tar files')
-parser.add_argument('--dataset_size', default=None, type=int,
-                    help='Number of Images in the dataset, set to num_classes * 1000 if None')
 
 # Optimizer parameters
 parser.add_argument('--opt', default='sgd', type=str, metavar='OPTIMIZER',
@@ -303,18 +308,46 @@ parser.add_argument('--resumeid', default='', type=str, help='Provide Wandb ID t
 parser.add_argument('--imnet-oneinstance', action='store_true', default=False, 
                     help='set wandb group name')
 
-## For local shuffling and only portion of dataset
-parser.add_argument('--portiontossd', action='store_true', default=False, 
-                    help='To load only portion of the dataset...')
-parser.add_argument('--portion-ngpus', type=int, default=1, metavar='N',
-                    help='how many nodes in total to divide the distributed loader')
+# Web Datasets
+parser.add_argument('-w','--wds', action='store_true', default=False,
+                    help='Using WebDatasets pipeline')
+parser.add_argument('--wds-datasetlen', type=int, default=0, metavar='N',
+                    help='total number of images in the dataset')
+
+#FFCV pipeline
+parser.add_argument('-f','--ffcv', action='store_true', default=False,
+                    help='Using FFCV pipeline')
 
 ## For DALI
 #DALI pipeline
 parser.add_argument('--dali', action='store_true', default=False,
                     help='Using DALI pipeline')
+parser.add_argument('--dali-cpu', action='store_true', default=False,
+                    help='Using DALI on CPU')
 parser.add_argument('--dgpu', action='store_true', default=False,
                     help='Using DALI pipeline')
+
+## For render to RAM
+parser.add_argument('--render-type', default="none", type = str, help='{cpu or gpu}')
+parser.add_argument('--render-fdb', action='store_true', default=False,
+                    help='Using CPU based real-time render to create FDB dataset.')
+parser.add_argument('--render-oneinstance', action='store_true', default=False,
+                    help='Using CPU based real-time render to create FDB dataset.')                    
+parser.add_argument('--render-mvfdb', action='store_true', default=False,
+                    help='Using CPU/GPU based real-time render to create MVF dataset.')
+parser.add_argument('--csv', default=None, 
+                    help='path/URL for CSV path://')
+parser.add_argument('--render-size', type=int, default=362, metavar='N',
+                    help='Image patch size (default: None => model default)')
+parser.add_argument('--render-countpatch', type=int, default=1, metavar='N',
+                    help='Image patch size (default: None => model default)')
+parser.add_argument('--render-patchmode', type=int, default=0, metavar='N',
+                    help='Image patch size (default: None => model default)')
+parser.add_argument('--instance', default=10, type = int, help='#instance, 10 => 1000 instance, 100 => 10,000 instance per category')
+parser.add_argument('--rotation', default=4, type = int, help='Flip per category')
+parser.add_argument('--nweights', default=25, type = int, help='Transformation of each weights. Original DB is 25 from csv files')
+parser.add_argument('--ram-batch', action='store_true', default=False,
+                    help='Experiment to read from RAM...')
 
 def _parse_args():
     args = parser.parse_args()
@@ -326,15 +359,23 @@ def _parse_args():
 
 def main():
     setup_default_logging()
-    args, args_text = _parse_args()   
+    args, args_text = _parse_args()
+   
+    # Choose color for the term
+    if args.dali:
+        terminal_clr = 'green'
+    elif args.wds:
+        terminal_clr = 'red'
+    elif args.ffcv:
+        terminal_clr = 'yellow'
+    else:
+        terminal_clr = 'blue'   
 
     args.prefetcher = not args.no_prefetcher
     args.distributed = int(os.getenv('OMPI_COMM_WORLD_SIZE', '1')) > 1
     args.local_rank = 0
     args.world_size = 1
     args.rank = 0  # global rank
-
-    
     if args.distributed:
         # initialize torch.distributed using MPI
         master_addr = os.getenv("MASTER_ADDR", default="localhost")
@@ -356,8 +397,10 @@ def main():
         _logger.info('Training with a single process on 1 GPUs.')
     assert args.rank >= 0
 
+
+    # Arguments
     print0("\n\nAll arguments:\n",args)
-    print0("\n\n")
+    print0("\n")
 
     # resolve AMP arguments based on PyTorch / Apex availability
     use_amp = None
@@ -475,9 +518,22 @@ def main():
                 _logger.info("Using native Torch DistributedDataParallel.")
             model = NativeDDP(model, device_ids=[args.local_rank])  # can use device str in Torch >= 1.1
 
+    ##################################### DATA LOADER AND DATASET ####################################################
     # Choose the DataSet Selector
-    if args.webdataset:
-        print0("\n\n=> Loading DataSet with WebDataset using .tars")
+    if args.wds:
+        print0(colored("wwwwwwww.......Using WebDatasets pipeline.....wwwww",terminal_clr))
+        print0("Loading shards:{}".format(args.data_dir))
+        
+        assert args.wds_datasetlen > 0, "Dataset len should be different than CERO..."
+        print0("\tDataset length wds: {:,} total images".format(args.wds_datasetlen))
+               
+        num_batches = args.wds_datasetlen // (args.batch_size * args.world_size)
+        assert num_batches >0, "Something wrong with the batch size, ranks and workers ->>>>  args.wds_datasetlen // (world_size * args.workers * args.batch_size)"
+        
+        print0("\tNumber of batches per epoch considering worldsize: {}".format(num_batches))
+        t0 = time.perf_counter()
+        
+        
         collate_fn = None
         mixup_fn = None
         mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -523,37 +579,86 @@ def main():
             pin_memory=args.pin_mem,
             repeated_aug=args.repeated_aug
         )
-
-        if args.dataset_size:
-            dataset_size = args.dataset_size
-        elif "_2ki" in args.trainshards:
-            dataset_size = args.num_classes * 2000
-        else:
-            dataset_size = args.num_classes * 1000
-
         train_dataset = (
-            wds.Dataset(args.trainshards)
-                .shuffle(dataset_size)
+            wds.WebDataset(args.data_dir,nodesplitter=wds.split_by_node)
+                .shuffle(args.wds_datasetlen)
                 .decode("pil")
                 .rename(image="jpg;jpeg;JPEG;png", target="cls")
                 .map_dict(image=transform_train)
                 .to_tuple("image", "target")
         )
-        loader_train = wds.WebLoader(train_dataset, batch_size=None, shuffle=False, num_workers=args.workers)
-        train_dataset = train_dataset.batched(args.batch_size, partial=False)
-
-        number_of_batches = dataset_size // (args.batch_size * args.world_size)
-        print0("dataset_size:{}, batch_size:{}, world_size(Total Devices):{}".format(dataset_size, args.batch_size,
-                                                                                        args.world_size))
-        print0("----> Number of batches to be processed per GPU = {}".format(number_of_batches))
-        loader_train = loader_train.repeat(2).slice(number_of_batches)
+        
+        loader_train = wds.WebLoader(dataset=train_dataset.batched(args.batch_size, partial=False), batch_size=None, shuffle=False, 
+                                     num_workers=args.workers,prefetch_factor=4,
+                                    )
+        print0("\tDataset_size:{:,}, batch_size:{:,}, world_size(Total Devices):{:,}".format(args.wds_datasetlen, args.batch_size, args.world_size))
+        print0("\t----> Number of batches to be processed per GPU = {}".format(num_batches))
+        loader_train = loader_train.repeat(1).slice(num_batches)
         # This only sets the value returned by the len() function; nothing else uses it,
         # but some frameworks care about it.
-        loader_train.length = number_of_batches
+        loader_train.length = num_batches
+        
+        t1 = time.perf_counter()
+        print0("\tTime to load categories:{:.4f} seconds\n".format(t1-t0))
+        # Print transformations
+        # print0(colored ("Train transformations:\n\t {}".format(loader_train.dataset.transform),'green'))
+    
+    elif args.ffcv is True:
+        print0(colored("fffffffffffff.......Using FFCV pipeline.....fffffffffff",terminal_clr))
+        print0("\tLoading beton file: {}".format(args.data_dir))
+        t0 = time.perf_counter()
+        
+        collate_fn = None
+        mixup_fn = None
+        mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
+        if mixup_active:
+            mixup_args = dict(
+                mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
+                prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
+                label_smoothing=args.smoothing, num_classes=args.num_classes)
+            if args.prefetcher:
+                assert not num_aug_splits  # collate conflict (need to support deinterleaving in collate mixup)
+                collate_fn = FastCollateMixup(**mixup_args)
+            else:
+                mixup_fn = Mixup(**mixup_args)    
+        
+        CIFAR_MEAN = [125.307, 122.961, 113.8575]
+        CIFAR_STD = [51.5865, 50.847, 51.255]
+        loaders = {}
+
+        for name in ['train']:
+            label_pipeline: List[Operation] = [IntDecoder(), ToTensor(), Squeeze()]
+            image_pipeline: List[Operation] = [RandomResizedCropRGBImageDecoder(output_size=[224,224])]
+            if name == 'train':
+                image_pipeline.extend([
+                    RandomHorizontalFlip(),
+                    RandomTranslate(padding=2, fill=tuple(map(int, CIFAR_MEAN))),
+                    Cutout(4, tuple(map(int, CIFAR_MEAN))),
+                ])
+            image_pipeline.extend([
+                ToTensor(),
+                # ToDevice(torch.device('cuda:0'), non_blocking=True),
+                ToTorchImage(),
+                Convert(torch.float32),
+                transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
+            ])
+        
+        # ordering = OrderOption.QUASI_RANDOM if name == 'train' else OrderOption.SEQUENTIAL
+        ordering = OrderOption.RANDOM
+
+        loader_train = Loader(args.data_dir, batch_size=args.batch_size, num_workers=args.workers, seed=rank+1,
+                               order=ordering, drop_last=(name == 'train'), os_cache=True,distributed=True,
+                               pipelines={'image': image_pipeline, 'label': label_pipeline},batches_ahead=4)
+       
+        t1 = time.perf_counter()
+        # print0("Dataset length: {:,} total images".format(len(train_dataset)))
+        print0("\tBatches per Rank to be processed: {:,} ".format(len(loader_train)))
+        print0("\tTime to load categories:{} seconds\n".format(t1-t0))
+        
     
     ################################################################## For Dali
     elif args.dali is True:
-        print0(colored("[[[[[[[........Using DALI pipeline.....]]]]]]]","red"))
+        print0(colored("[[[[[[[........Using DALI pipeline.....]]]]]]]",terminal_clr))
         collate_fn = None
         mixup_fn = None
         mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
@@ -598,7 +703,7 @@ def main():
         else:
             # dataset_root = args.data_dir + "/train"
             dataset_root = args.data_dir
-            print0("Loading from:{}".format(dataset_root))
+            print0("\tLoading from:{}".format(dataset_root))
             t0 = time.perf_counter()
             pipe = create_dali_pipeline_TrainAug( 
                                     batch_size=args.batch_size,
@@ -610,7 +715,7 @@ def main():
                                     data_dir=dataset_root,
                                     crop=args.input_size[1] ,
                                     size=362,
-                                    dali_cpu=False,
+                                    dali_cpu=args.dali_cpu,
                                     shard_id=args.rank,
                                     num_shards=args.world_size,
                                     is_training=True,
@@ -619,7 +724,6 @@ def main():
                                     data_config=data_config,
                                     )
             pipe.build()
-            
             r_name = "Reader_Train"
             r_size = -1
     
@@ -627,36 +731,21 @@ def main():
         # pipe.build()
         loader_train = DALIClassificationIterator(pipe,size=r_size, reader_name=r_name, last_batch_policy=LastBatchPolicy.DROP,prepare_first_batch=True,auto_reset=True)
         t1 = time.perf_counter()
-        print0("Batches per Rank to be processed: {:,} batches, {:,} images per batch".format(len(loader_train), args.batch_size))
-        print0("Time load DALI:{} seconds\n".format(t1-t0))
+        print0("\tBatches per Rank to be processed: {:,} batches, {:,} images per batch".format(len(loader_train), args.batch_size))
+        print0("\tTime load DALI:{} seconds\n".format(t1-t0))
     
     else:
-    #Ask for Imnet 1 instance per class
-        if args.imnet_oneinstance :
-            print0("\n\n=> Loading DataSet with Imnet-1instances per Class")
-            # dataset_train = OneInstance_Imnet(root=args.data_dir)
-        elif args.portiontossd:
-            print0("\n\n=> Using only aportion to load into the ssd with local shuffling")
-            
-            # For debuging on Interactive Node
-            # if rank == 0:
-            #     args.data_dir = "ssd/fdb10_egl"
-            # elif rank == 1:
-            #     args.data_dir = "ssd/fdb10_b_egl"
-            # else:
-            #     pass
         
-            print0("Loading from:{}".format(args.data_dir))
-            dataset_train = ImageFolderNumber_To_Idx(root=args.data_dir)
-            print0(dataset_train.class_to_idx)
+        print0(colored("===<<<< Loading files from PyTorch...",terminal_clr))
+        print0("\tLoading from:{}".format(args.data_dir))
+        t0 = time.perf_counter()
+    
+        dataset_train = create_dataset(
+            args.dataset,
+            root=args.data_dir, split=args.train_split, is_training=True,
+            batch_size=args.batch_size, repeats=args.epoch_repeats)
 
-        else:
-            # create datasets with timm's dataloader
-            dataset_train = create_dataset(
-                args.dataset,
-                root=args.data_dir, split=args.train_split, is_training=True,
-                batch_size=args.batch_size, repeats=args.epoch_repeats)
-
+        w_i_fn = None
         # setup mixup / cutmix
         collate_fn = None
         mixup_fn = None
@@ -706,18 +795,24 @@ def main():
             collate_fn=collate_fn,
             pin_memory=args.pin_mem,
             repeated_aug=args.repeated_aug,
-            worker_init_fn=None,
+            worker_init_fn=w_i_fn,
             persistent_workers=True,
-            portiontossd=args.portiontossd,
-            ngpus=args.portion_ngpus,
-            rank=args.rank,
         )
+        
+        t1 = time.perf_counter()
+        
+        print0("\tDataset length: {:,} total images".format(len(dataset_train)))
+        print0("\tBatches per Rank to be processed: {:,} total batches".format(len(loader_train)))
+        print0("\tTime to load categories:{} seconds\n".format(t1-t0))
         
         # Print transformations
         print0(colored ("Train transformations:\n\t {}".format(loader_train.dataset.transform),'green'))
+    
+    ####################################################################################### END #########################
+    
     # setup learning rate schedule and starting epoch
-    iter_per_epoch = len(loader_train)
-    lr_scheduler, num_iters = create_scheduler(args, optimizer, len(loader_train))
+    iter_per_epoch = loader_train.length if args.wds else len(loader_train)
+    lr_scheduler, num_iters = create_scheduler(args, optimizer, loader_train.length if args.wds else len(loader_train))
     
     print0("Lr_Scheduler: {}".format(vars(lr_scheduler)))
     
@@ -730,7 +825,7 @@ def main():
         start_epoch = resume_epoch
     if lr_scheduler is not None and start_epoch > 0:
         if 'iter' in args.sched:
-            lr_scheduler.step_update(start_epoch * len(loader_train))
+            lr_scheduler.step_update(start_epoch * (loader_train.length if args.wds else len(loader_train)))
         else:
             lr_scheduler.step(start_epoch)
 
@@ -791,7 +886,7 @@ def main():
             ### Measure time per epoch
             initial_time = time.perf_counter()
 
-            if args.webdataset is not True and args.dali is not True :
+            if args.wds is not True and args.dali is not True and args.ffcv is not True :
                 if args.distributed and hasattr(loader_train.sampler, 'set_epoch'):
                     loader_train.sampler.set_epoch(epoch)
 
@@ -870,8 +965,8 @@ def train_one_epoch(
     model.train()
 
     end = time.time()
-    last_idx = len(loader) - 1
-    num_updates = epoch * len(loader)
+    last_idx = (loader.length if args.wds else len(loader)) - 1
+    num_updates = epoch * (loader.length if args.wds else len(loader))
     
     
     def debug_tensors(im,la):
@@ -942,7 +1037,7 @@ def train_one_epoch(
                     'LR: {lr:.3e}  '
                     'Data: {data_time.val:.3f} ({data_time.avg:.3f})'.format(
                         epoch,
-                        batch_idx, len(loader),
+                        batch_idx, (loader.length if args.wds else len(loader)),
                         100. * batch_idx / last_idx,
                         loss=losses_m,
                         batch_time=batch_time_m,
@@ -967,8 +1062,14 @@ def train_one_epoch(
 
         if lr_scheduler is not None:
             lr_scheduler.step_update(num_updates=num_updates, metric=losses_m.avg)
+            
 
         end = time.time()
+        
+        ############Debugging purposes DO NOT USE FOR PRE_TRAIN
+        # if batch_idx == args.log_interval * 10 :
+        #     break
+        
         # end for
 
     if hasattr(optimizer, 'sync_lookahead'):

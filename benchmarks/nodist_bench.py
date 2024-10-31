@@ -45,7 +45,7 @@ except ImportError:
 parser = argparse.ArgumentParser(description='PyTorch fractal make FractalDB')
 parser.add_argument('-j', '--workers', type=int, default=-1, metavar='N',
                     help='how many training processes to use (default: 1)')
-parser.add_argument('--epochs', type=int, default=3, metavar='N',
+parser.add_argument('-e','--epochs', type=int, default=3, metavar='N',
                     help='number of epochs to train (default: 200)')
 parser.add_argument('-b', '--batch-size', type=int, default=128, metavar='N',
                     help='input batch size for training (default: 32)')
@@ -371,11 +371,11 @@ def main():
             
         print0("Dataset length wds: {:,} total images".format(args.wds_datasetlen))
                
-        batches = args.wds_datasetlen // (world_size * args.workers * args.batch_size)
+        # batches = args.wds_datasetlen // (world_size * args.workers * args.batch_size)
+        num_batches = args.wds_datasetlen // args.batch_size
+        assert num_batches >0, "Something wrong with the batch size, ranks and workers ->>>>  args.wds_datasetlen // (world_size * args.workers * args.batch_size)"
         
-        assert batches >0, "Something wrong with the batch size, ranks and workers ->>>>  args.wds_datasetlen // (world_size * args.workers * args.batch_size)"
-        
-        print0("Number of batches per epoch considering workers and worldsize: {}".format(batches))
+        print0("Number of batches per epoch considering workers and worldsize: {}".format(num_batches))
         
         t0 = time.perf_counter()
         train_dataset = (
@@ -385,16 +385,20 @@ def main():
                 .rename(image="jpg;jpeg;JPEG;png", target="cls")
                 .map_dict(image=train_transform)
                 .to_tuple("image", "target")
-                # .with_epoch(batches)
         )
 
-        train_loader = DataLoader(dataset=train_dataset.batched(args.batch_size),
-                                                    batch_size=None,
-                                                    # sampler=train_sampler,
-                                                    num_workers=args.workers,
-                                                    persistent_workers=True,
-                                                    prefetch_factor=4,
-                                                    )
+        # train_dataset = train_dataset.batched(args.batch_size)
+        train_loader = wds.WebLoader(dataset=train_dataset.batched(args.batch_size), batch_size=None, shuffle=False, 
+                                     num_workers=args.workers,persistent_workers=True,prefetch_factor=4,
+                                    )
+        #                                             )
+        # train_loader = DataLoader(dataset=train_dataset.batched(args.batch_size),
+        #                                             batch_size=None,
+        #                                             # sampler=train_sampler,
+        #                                             num_workers=args.workers,
+        #                                             persistent_workers=True,
+        #                                             prefetch_factor=4,
+        #                                             )
         t1 = time.perf_counter()
         # print0("Dataset length: {:,} total images".format(len(train_dataset)))
         # print0("Images per Rank to be processed: {:,} total images".format(len(train_loader)))

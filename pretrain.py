@@ -51,7 +51,7 @@ mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
 # from oneInstance import OneInstance_Imnet
 
-from benchmarks.Fractal2D import Fractal2D_cpu, worker_init_fdb_fn
+# from benchmarks.Fractal2D import Fractal2D_cpu, worker_init_fdb_fn
 
 def seed_worker(rank):
     worker_seed = torch.initial_seed() + rank

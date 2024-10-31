@@ -3,6 +3,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data as torch_data
+from torch.utils.data import Dataset, DataLoader
 import torch.utils.data.distributed as torch_data_distributed
 from torchvision import datasets,transforms
 # from torch.nn.parallel import DistributedDataParallel as DDP
@@ -38,13 +39,24 @@ from ffcv.writer import DatasetWriter
 
 # Custom for local batch experiments
 import sys
-sys.path.insert(0,'../')
-from myfolder.FolderNumberToIdx import ImageFolderNumber_To_Idx
+# sys.path.insert(0,'../')
+# from myfolder.FolderNumberToIdx import ImageFolderNumber_To_Idx
+
+from mpi4py import MPI
+comm = MPI.COMM_WORLD
+
+def print0(*args):
+    if dist.is_initialized():
+        if dist.get_rank() == 0:
+            print(*args, flush=True)
+    else:
+        print(*args, flush=True)
+
 
 parser = argparse.ArgumentParser(description='PyTorch fractal make FractalDB')
 parser.add_argument('-j', '--workers', type=int, default=-1, metavar='N',
                     help='how many training processes to use (default: 1)')
-parser.add_argument('--epochs', type=int, default=5, metavar='N',
+parser.add_argument('-e','--epochs', type=int, default=5, metavar='N',
                     help='number of epochs to train (default: 200)')
 parser.add_argument('-b', '--batch-size', type=int, default=128, metavar='N',
                     help='input batch size for training (default: 32)')
@@ -85,15 +97,7 @@ parser.add_argument('--render-countpatch', type=int, default=1, metavar='N',
 parser.add_argument('--render-patchmode', type=int, default=0, metavar='N',
                     help='Image patch size (default: None => model default)')
 
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
 
-def print0(*args):
-    if dist.is_initialized():
-        if dist.get_rank() == 0:
-            print(*args, flush=True)
-    else:
-        print(*args, flush=True)
 
 
 @pipeline_def
@@ -157,12 +161,11 @@ def train(train_loader,model,criterion,optimizer,epoch,device,world_size,args,te
     # print(train_loader.sampler.num_samples)
     
     def debug_tensors(im,la):
-        print(colored("  {} \t{} \t{}".format(im.shape,im.device,im.dtype),terminal_clr))
-        print(colored("  {} \t\t\t{} \t{}".format(la.shape,la.device,la.dtype),terminal_clr))
+        print0(colored("  {} \t{} \t{}".format(im.shape,im.device,im.dtype),terminal_clr))
+        print0(colored("  {} \t\t\t{} \t{}".format(la.shape,la.device,la.dtype),terminal_clr))
         # exit(0)
 
     if args.wds:
-    
         # We measure how many epochs per work and if it is not enough we DROP last Batch
         per_work = args.wds_datasetlen // (world_size * args.workers * args.batch_size)
         last_batch = per_work * args.workers
@@ -199,7 +202,7 @@ def train(train_loader,model,criterion,optimizer,epoch,device,world_size,args,te
             progress_perc =  batch_idx / last_batch
             
             
-            print('Epoch: {} [{:,}/{:,} ({:.0%})] Time per Batch:{:.4f} s'.format(
+            print0('Epoch: {} [{:,}/{:,} ({:.0%})] Time per Batch:{:.4f} s'.format(
                 epoch, progress, total_im, progress_perc , time.perf_counter() - t))
             debug_tensors(input,target)
             t = time.perf_counter()
@@ -207,7 +210,7 @@ def train(train_loader,model,criterion,optimizer,epoch,device,world_size,args,te
     tfinal = time.perf_counter()
     # print0("Total time per Epoch [{}]: {} seconds".format(epoch,tfinal - t0))
     total_time = tfinal - t0
-    print("\tTotal time per epoch [{}]: {:0.4f} s, {:0>8} ".format(epoch,total_time,str(timedelta(seconds=total_time))))
+    print0("\tTotal time per epoch [{}]: {:0.4f} s, {:0>8} ".format(epoch,total_time,str(timedelta(seconds=total_time))))
 
 def main():
     args = parser.parse_args()
@@ -356,33 +359,41 @@ def main():
         print0("Loading shards:{}".format(args.root))
         
         assert args.wds_datasetlen > 0, "Dataset len should be different than CERO..."
-            
         print0("Dataset length wds: {:,} total images".format(args.wds_datasetlen))
                
-        batches = args.wds_datasetlen // (world_size * args.workers * args.batch_size)
+        num_batches = args.wds_datasetlen // (args.batch_size * args.world_size)
+        assert num_batches >0, "Something wrong with the batch size, ranks and workers ->>>>  args.wds_datasetlen // (world_size * args.workers * args.batch_size)"
         
-        assert batches >0, "Something wrong with the batch size, ranks and workers ->>>>  args.wds_datasetlen // (world_size * args.workers * args.batch_size)"
-        
-        print0("Number of batches per epoch considering workers and worldsize: {}".format(batches))
-        
+        print0("Number of batches per epoch considering worldsize: {}".format(num_batches))
         t0 = time.perf_counter()
         train_dataset = (
-            wds.WebDataset(args.root,cache_dir=ssd,cache_size=1000)
+            wds.WebDataset(args.root,cache_dir=ssd,cache_size=100,nodesplitter=wds.split_by_node)
                 .shuffle(args.wds_datasetlen)
                 .decode("pil")
                 .rename(image="jpg;jpeg;JPEG;png", target="cls")
                 .map_dict(image=train_transform)
                 .to_tuple("image", "target")
-                # .with_epoch(batches)
         )
 
-        train_loader = torch_data.DataLoader(dataset=train_dataset.batched(args.batch_size),
-                                                    batch_size=None,
-                                                    # sampler=train_sampler,
-                                                    num_workers=args.workers,
-                                                    persistent_workers=True,
-                                                    prefetch_factor=4,
-                                                    )
+        
+        # train_dataset = train_dataset.batched(args.batch_size, partial=False)
+        train_loader = wds.WebLoader(dataset=train_dataset.batched(args.batch_size, partial=False), batch_size=None, shuffle=False, 
+                                     num_workers=args.workers,prefetch_factor=4,
+                                    )
+        
+        # train_loader = torch_data.DataLoader(dataset=train_dataset.batched(args.batch_size, partial=False),
+        #                                             batch_size=None,
+        #                                             # sampler=train_sampler,
+        #                                             num_workers=args.workers,
+        #                                             persistent_workers=True,
+        #                                             prefetch_factor=4,
+        #                                     )
+        
+        train_loader = train_loader.repeat(1).slice(num_batches)
+        # This only sets the value returned by the len() function; nothing else uses it,
+        # but some frameworks care about it.
+        train_loader.length = num_batches
+        
         t1 = time.perf_counter()
         # print0("Dataset length: {:,} total images".format(len(train_dataset)))
         # print0("Images per Rank to be processed: {:,} total images".format(len(train_loader)))
@@ -413,10 +424,12 @@ def main():
                 transforms.Normalize(CIFAR_MEAN, CIFAR_STD),
             ])
         
-        ordering = OrderOption.QUASI_RANDOM if name == 'train' else OrderOption.SEQUENTIAL
+        
+        # ordering = OrderOption.QUASI_RANDOM if name == 'train' else OrderOption.SEQUENTIAL
+        ordering = OrderOption.RANDOM
 
-        train_loader = Loader(args.root, batch_size=args.batch_size, num_workers=args.workers,
-                               order=ordering, drop_last=(name == 'train'), os_cache=True,
+        train_loader = Loader(args.root, batch_size=args.batch_size, num_workers=args.workers, seed=rank+1,
+                               order=ordering, drop_last=(name == 'train'), os_cache=True,distributed=True,
                                pipelines={'image': image_pipeline, 'label': label_pipeline},batches_ahead=4)
        
         t1 = time.perf_counter()
@@ -427,29 +440,28 @@ def main():
     
     else:
         print0(colored("===<<<< Loading files from PyTorch...",terminal_clr))
-        print0("Loading from:{}".format(args.root))
+        print0("\tLoading from:{}".format(args.root))
         t0 = time.perf_counter()
         
         train_dataset = datasets.ImageFolder(args.root,transform=train_transform)
-        # print(train_dataset.imgs)
-        
-        train_sampler = torch_data_distributed.DistributedSampler(train_dataset,num_replicas=1,rank=rank)
-
-        train_loader = DataLoader(dataset=train_dataset,
-                                                    batch_size=args.batch_size,
-                                                    sampler=train_sampler,
-                                                    num_workers=args.workers,
-                                                    persistent_workers=True,
-                                                    drop_last=True,
-                                                    prefetch_factor=4,
-                                                    )
+        train_sampler = torch_data_distributed.DistributedSampler(train_dataset,num_replicas=world_size,rank=rank)
+        train_loader  = DataLoader(dataset=train_dataset,
+                                                batch_size=args.batch_size,
+                                                sampler=train_sampler,
+                                                num_workers=args.workers,
+                                                persistent_workers=True,
+                                                drop_last=True,
+                                                prefetch_factor=4,
+                                    )
+ 
         t1 = time.perf_counter()
         
-        print0("Dataset length: {:,} total images".format(len(train_dataset)))
-        print0("Batches per Rank to be processed: {:,} total batches".format(len(train_loader)))
-        print0("Time to load categories:{} seconds\n".format(t1-t0))
+        print0("\tDataset length: {:,} total images".format(len(train_dataset)))
+        print0("\tBatches per Rank to be processed: {:,} total batches".format(len(train_loader)))
+        print0("\tTime to load categories:{} seconds\n".format(t1-t0))
 
- 
+
+        
     model = None
     criterion = None
     optimizer = None
@@ -466,7 +478,7 @@ def main():
         train(train_loader,model,criterion,optimizer,epoch,device,world_size,args,terminal_clr)
         # validate(val_loader,model,criterion,device)
     
-    # dist.barrier()
+    comm.barrier()
     print0("\n\tTotal time for all epochs:: {:0.6f} seconds,{:0>8} ".format(time.perf_counter()-t0,str(timedelta(seconds=time.perf_counter()-t0))))
     print0("Finished...")
 
