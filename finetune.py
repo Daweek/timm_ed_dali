@@ -46,9 +46,9 @@ from dali.pipe_finetune import create_dali_pipeline_Aug, create_dali_pipeline_No
 
 from mpi4py import MPI
 
-comm = MPI.COMM_WORLD
-mpirank = comm.Get_rank()
-mpisize = comm.Get_size()
+# comm = MPI.COMM_WORLD
+# mpirank = comm.Get_rank()
+# mpisize = comm.Get_size()
 
 def print0(*args):
     if dist.is_initialized():

@@ -3,10 +3,16 @@
 
 # Modules to run on ABCI
 # ======== Modules ========
-echo "Include main ABCI modules.."
+echo "Include main ABCI modules for 3.0 .."
 source /etc/profile.d/modules.sh
 module purge
-module load cuda/12.4/12.4.0 cudnn/9.1/9.1.1 nccl/2.21/2.21.5-1 gcc/13.2.0 cmake/3.29.0 hpcx-mt/2.12
+####### MPI
+# module load intel-mpi/2021.13
+# module load hpcx/2.20
+module load hpcx-mt/2.20
+# Load CUSTOM OpenMPI with CUDA support
+# export PATH=$HOME/apps/openmpi/bin:$PATH
+module load cuda/12.4/12.4.1 cudnn/9.5/9.5.1 nccl
 
 # ======== Pyenv/ ========
 echo "Include main python environment..."
@@ -15,7 +21,7 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
 
-pyenv local anaconda3-2023.07-2/envs/ffcv
+pyenv local 3.11.11
 
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"

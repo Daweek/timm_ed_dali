@@ -7,13 +7,17 @@
 #$ -N fdb_render
 
 # cat $JOB_SCRIPT
+JOB_ID=$PBS_JOBID
+
+
 echo "................................................................................"
 echo "JOB ID: ---- >>>>>>   $JOB_ID"
 
 # ======== Modules ========
 source /etc/profile.d/modules.sh
 module purge
-module load cuda/12.4/12.4.0 cudnn/9.1/9.1.1 nccl/2.21/2.21.5-1 gcc/13.2.0 cmake/3.29.0 hpcx-mt/2.12
+module load hpcx-mt/2.20
+module load cuda/12.6/12.6.1 cudnn/9.5/9.5.1 nccl/2.23/2.23.4-1 
 
 # ======== Pyenv/ ========
 export PYENV_ROOT="$HOME/.pyenv"
@@ -21,7 +25,7 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
 
-pyenv local anaconda3-2023.07-2/envs/ffcv
+pyenv local 3.12.8
 
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
@@ -54,7 +58,7 @@ size=(32 64 128 256 512 1024)
 #root=nfs/raw
 
 # SSD ___________________________
-export SSD=/local/${JOB_ID}.1.gpu
+export SSD=/local/${JOB_ID}.pbs1
 root=${SSD}/raw
 # Check if the directory exists
 if [ -d "$root" ]; then
@@ -74,7 +78,7 @@ do
 
     # Render to somewhere
     # mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -np 80 python mpi_gpu.py --ngpus-pernode 4 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x 
-    mpirun --bind-to socket --use-hwthread-cpus -np 80 python mpi_gpu.py --ngpus-pernode 4 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
+    mpirun --bind-to socket --use-hwthread-cpus -np 96 python mpi_gpu.py --ngpus-pernode 8 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
     
     #--instance 10 --rotation 1 --nweights 1
 

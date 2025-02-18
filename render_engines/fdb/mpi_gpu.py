@@ -163,7 +163,7 @@ def main():
 
     csv_names = csv_names[start_list:end_list]
     print0(f"rank: {mpirank}, csv_names:{csv_names}]\n\n")
-    # comm.Barrier()
+    comm.Barrier()
     #Check per node to create directory to render
     if int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', '0')) == 0:
         if not os.path.exists(os.path.join(args.save_root)):

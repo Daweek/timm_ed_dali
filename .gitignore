@@ -13,7 +13,7 @@
 /benchmarks/weights
 /benchmarks/ssd*
 
-
+/hostfile
 
 /render_engines/fdb/bake_db
 /render_engines/fdb/csv/large
