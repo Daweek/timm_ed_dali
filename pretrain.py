@@ -1,12 +1,4 @@
-#!/usr/bin/env python3
-""" Pre-Train Python Script
-Heavily based on the training script provided by timm.
 
-Title: pytorch-image-models
-Author: Ross Wightman
-Date: 2021
-Availability: https://github.com/rwightman/pytorch-image-models/blob/master/train.py
-"""
 import argparse
 import time
 from datetime import timedelta
@@ -69,7 +61,6 @@ def print0(*args):
             print(*args, flush=True)
     else:
         print(*args, flush=True)
-
 
 try:
     from apex import amp
@@ -344,9 +335,6 @@ def _parse_args():
 def main():
     setup_default_logging()
     args, args_text = _parse_args()
-   
-    print0("\n\nAll arguments:\n",args)
-    print0("\n\n")   
 
     args.prefetcher = not args.no_prefetcher
     args.distributed = int(os.getenv('OMPI_COMM_WORLD_SIZE', '1')) > 1
@@ -374,6 +362,10 @@ def main():
         _logger.info('Training with a single process on 1 GPUs.')
     assert args.rank >= 0
 
+    print0("\n\nAll arguments:\n",args)
+    print0("\n\n")   
+    
+    
     # resolve AMP arguments based on PyTorch / Apex availability
     use_amp = None
     if args.amp:

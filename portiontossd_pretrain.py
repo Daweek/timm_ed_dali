@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-""" Pre-Train Python Script
-Heavily based on the training script provided by timm.
-
-Title: pytorch-image-models
-Author: Ross Wightman
-Date: 2021
-Availability: https://github.com/rwightman/pytorch-image-models/blob/master/train.py
-"""
 import argparse
 import time
 from datetime import timedelta

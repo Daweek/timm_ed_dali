@@ -1,53 +1,41 @@
-#!/bin/sh
-#$ -l rt_F=1
-#$ -l h_rt=01:00:00
-#$ -j y
-#$ -o output/$JOB_ID_render
-#$ -cwd
-#$ -N fdb_render
+#!/bin/bash
+#PBS -q rt_HF
+#PBS -l select=1:ncpus=192:ngpus=8:mpiprocs=192
+#PBS -N ft_cifar100
+#PBS -l walltime=02:00:00
+#PBS -P gcc50533
+#PBS -j oe
+#PBS -V
+#PBS -koed
+#PBS -o output/
 
 # cat $JOB_SCRIPT
-JOB_ID=$PBS_JOBID
+echo "ABCI 3.0 ..................................................................................."
+JOB_ID=$(echo "${PBS_JOBID}" | cut -d '.' -f 1)
+echo "JOB ID: ---- >>>>>>  $JOB_ID"
 
+# ========= Get local Directory ======================================================
+cd $PBS_O_WORKDIR
+pwd -LP
+# ======== Modules and Python on main .configure.sh ==================================
+source ./../config.sh
+######################################################################################
+# ========== For MPI
+#### From others
+NUM_GPU_PER_NODE=8
+NUM_NODES=1
+NUM_GPUS=$((${NUM_NODES} * ${NUM_GPU_PER_NODE}))
 
-echo "................................................................................"
-echo "JOB ID: ---- >>>>>>   $JOB_ID"
+echo "NUM_GPUS: ${NUM_GPUS}"
+echo "NUM_NODES: ${NUM_NODES}"
+echo "NUM_GPU_PER_NODE: ${NUM_GPU_PER_NODE}"
 
-# ======== Modules ========
-source /etc/profile.d/modules.sh
-module purge
-module load hpcx-mt/2.20
-module load cuda/12.6/12.6.1 cudnn/9.5/9.5.1 nccl/2.23/2.23.4-1 
+export MASTER_ADDR=$(/usr/sbin/ip a show dev bond0 | grep inet | cut -d " " -f 6 | cut -d "/" -f 1|head -n 1)
+export MASTER_PORT=$((10000 + ($JOB_ID % 50000)))
+    echo "MASTER_ADDR: ${MASTER_ADDR}"
+    echo "MASTER_PORT: ${MASTER_PORT}"
 
-# ======== Pyenv/ ========
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)"
-eval "$(pyenv virtualenv-init -)"
-
-pyenv local 3.12.8
-
-export PYTHONUNBUFFERED=1
-export PYTHONWARNINGS="ignore"
-
-convert_milliseconds() {
-    local total_ms=$1
-
-    # Calculate total seconds and remaining milliseconds
-    local total_seconds=$(echo "$total_ms / 1000" | bc)
-    local remaining_ms=$((total_ms % 1000))  # Remaining milliseconds
-
-    # Calculate days, hours, minutes, and seconds using bc
-    local days=$(echo "$total_seconds / 86400" | bc)
-    local hours=$(echo "($total_seconds % 86400) / 3600" | bc)
-    local minutes=$(echo "($total_seconds % 3600) / 60" | bc)
-    local seconds=$(echo "$total_seconds % 60" | bc)
-
-    # Print in D:H:M:S.ms format
-    printf "\t%d days, %02d hours, %02d minutes, %02d seconds, %03d milliseconds\n" "$days" "$hours" "$minutes" "$seconds" "$remaining_ms"
-}
-
-
+# ========= For experiment and pre-train
 #######################################################
 global_start=$(date +%s%3N)
 # Experiments parameters
@@ -58,7 +46,7 @@ size=(32 64 128 256 512 1024)
 #root=nfs/raw
 
 # SSD ___________________________
-export SSD=/local/${JOB_ID}.pbs1
+export SSD=${PBS_LOCALDIR}
 root=${SSD}/raw
 # Check if the directory exists
 if [ -d "$root" ]; then
@@ -78,7 +66,7 @@ do
 
     # Render to somewhere
     # mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -np 80 python mpi_gpu.py --ngpus-pernode 4 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x 
-    mpirun --bind-to socket --use-hwthread-cpus -np 96 python mpi_gpu.py --ngpus-pernode 8 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
+    mpirun -np ${NUM_GPUS} -hostfile $PBS_NODEFILE --bind-to socket --oversubscribe -map-by ppr:8:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python mpi_gpu.py --ngpus-pernode 8 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
     
     #--instance 10 --rotation 1 --nweights 1
 

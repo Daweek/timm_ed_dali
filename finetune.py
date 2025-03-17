@@ -1,12 +1,5 @@
-#!/usr/bin/env python3
-""" Fine-tune Python Script
-Heavily based on the training script provided by timm.
+## Based on Timm fine-tune file
 
-Title: pytorch-image-models
-Author: Ross Wightman
-Date: 2021
-Availability: https://github.com/rwightman/pytorch-image-models/blob/master/train.py
-"""
 import argparse
 import time
 from datetime import timedelta
@@ -46,9 +39,9 @@ from dali.pipe_finetune import create_dali_pipeline_Aug, create_dali_pipeline_No
 
 from mpi4py import MPI
 
-# comm = MPI.COMM_WORLD
-# mpirank = comm.Get_rank()
-# mpisize = comm.Get_size()
+comm = MPI.COMM_WORLD
+mpirank = comm.Get_rank()
+mpisize = comm.Get_size()
 
 def print0(*args):
     if dist.is_initialized():
@@ -303,8 +296,6 @@ def main():
     setup_default_logging()
     args, args_text = _parse_args()
     
-  
-    
     # Check Color Jitter
     if args.color_jitter == 0.0:
         args.color_jitter = None
@@ -384,8 +375,7 @@ def main():
         args.num_classes = model.num_classes  # FIXME handle model default vs config num_classes more elegantly
 
     if args.rank == 0:
-        _logger.info(
-            f'Model {safe_model_name(args.model)} created, param count:{sum([m.numel() for m in model.parameters()])}')
+        print0(f'Model {safe_model_name(args.model)} created, param count:{sum([m.numel() for m in model.parameters()])}')
         # mkdir output dir
         if args.output is not '':
             os.makedirs(args.output, exist_ok=True)
@@ -765,7 +755,7 @@ def main():
             
             total_time = time.perf_counter() - initial_time
             if args.rank == 0:
-                _logger.info("  Total time per epoch: {} seconds, {:0>8} ".format(total_time,str(timedelta(seconds=total_time)))) 
+                _logger.info("  Total time per epoch: {} seconds, {:0>8}".format(total_time,str(timedelta(seconds=total_time)))) 
 
     except KeyboardInterrupt:
         pass
@@ -780,6 +770,8 @@ def main():
     
     fina_experiment_time = time.perf_counter() - initial_experiment_time
     time.sleep(0.5) # -> Wait for the console to flush
+    
+    torch.distributed.destroy_process_group()
     
     print0(colored("Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'white'))
 
