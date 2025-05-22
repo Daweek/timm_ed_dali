@@ -1,6 +1,6 @@
 #!/bin/bash
 #PBS -q rt_HF
-#PBS -l select=2:ncpus=384:ngpus=32:mpiprocs=192
+#PBS -l select=2:ncpus=384:ngpus=16:mpiprocs=192
 #PBS -N ft_imnet1k
 #PBS -l walltime=06:30:00
 #PBS -P gcc50533
@@ -70,7 +70,7 @@ export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MO
 
 ###################################### Tar to SSD
 echo "Copy and Untar..."
-mpirun --mca btl tcp,smcuda,self -np ${NUM_NODES} -map-by ppr:1:node -hostfile $PBS_NODEFILE tar -xf datasets/imnet.tar -C $PBS_LOCALDIR
+mpirun --mca btl tcp,smcuda,self -np ${NUM_NODES} -map-by ppr:1:node -hostfile $PBS_NODEFILE tar -xf /home/acc12930pb/groups_shared/datasets/imnet.tar -C $PBS_LOCALDIR
 readlink -f ${SSD}/${DATASET_NAME}
 ls ${SSD}/${DATASET_NAME}/train | wc -l
 echo "Finished copying and Untar..."

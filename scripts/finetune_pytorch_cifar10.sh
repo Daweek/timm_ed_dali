@@ -1,9 +1,9 @@
 #!/bin/bash
 #PBS -q rt_HF
 #PBS -l select=1:ncpus=192:ngpus=8:mpiprocs=192
-#PBS -N ft_cifar100
+#PBS -N LP_cifar10
 #PBS -l walltime=02:00:00
-#PBS -P gcc50533
+#PBS -P gah51624
 #PBS -j oe
 #PBS -V
 #PBS -koed
@@ -58,7 +58,7 @@ export SSD=$PBS_LOCALDIR
 export PRE_JOB_ID=42084625
 export PRE_EXPERIMENT=localShuf
 
-export EXPERIMENT=test_imnet
+export EXPERIMENT=LP_CIFAR10
 # For Timm scripts...
 # export CP_DIR=/home/acc12930pb/working/transformer/beforedali_timm_main_sora/checkpoint/tiny/fdb1k/pre_training/pretrain_deit_tiny_fdb1k_lr1.0e-3_epochs300_bs512_ssd_362x_GLFW3090/last.pth.tar  #----->>>>> best so far... 86.72
 
@@ -68,13 +68,13 @@ export OUT_DIR=/home/acc12930pb/working/transformer/timm_ed_dali/checkpoint/${MO
 
 ###################################### Tar to SSD
 echo "Copy and Untar..."
-mpirun --mca btl tcp,smcuda,self -np 2 -map-by ppr:${NUM_NODES}:node -hostfile $PBS_NODEFILE tar -xvf datasets/cifar100.tar -C $PBS_LOCALDIR
+mpirun --mca btl tcp,smcuda,self -np 1 -map-by ppr:${NUM_NODES}:node -hostfile $PBS_NODEFILE tar -xf /home/acc12930pb/groups_shared/datasets/cifar10.tar -C $PBS_LOCALDIR
 readlink -f ${SSD}/cifar10
 ls ${SSD}/ |wc -l
 echo "Finished copying and Untar..."
 
 wandb enabled
-
+# mpirun --use-hwthread-cpus --oversubscribe -np ${NUM_GPUS}  \
 mpirun -np ${NUM_GPUS} -hostfile $PBS_NODEFILE --bind-to socket --oversubscribe -map-by ppr:8:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 btl_openib_allow_ib 1 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} \
         python finetune.py /home/acc12930pb/datasets/cifar10 \
         --model deit_${MODEL}_patch16_224 --experiment ${JOB_ID}_fine_deit_${PIPE}_${MODEL}_${DATASET_NAME}_from_fdb${PRE_CLS}k_${RENDER_HWD}_lr${PRE_LR}_epochs${PRE_EPOCHS}_bs${PRE_BATCH}_${PRE_STORAGE}_${EXPERIMENT} \

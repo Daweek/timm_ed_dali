@@ -11,7 +11,7 @@ module purge
 module load hpcx-mt/2.20
 # Load CUSTOM OpenMPI with CUDA support
 # export PATH=$HOME/apps/openmpi/bin:$PATH
-module load cuda/12.6/12.6.1 cudnn/9.5/9.5.1 nccl/2.25/2.25.1-1 gdrcopy/2.4.1 
+module load cuda/12.8/12.8.1 cudnn/9.5/9.5.1 nccl/2.25/2.25.1-1 
 
 # ======== Pyenv/ ========
 echo "Include main python environment..."
@@ -20,11 +20,13 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init --path)"
 eval "$(pyenv virtualenv-init -)"
 
-pyenv local 3.11.11
 
 export PYTHONUNBUFFERED=1
 export PYTHONWARNINGS="ignore"
 
+## Debug ON
+
+env | grep PBS
 
 # Extra routines 
 echo "Including extra util routines to measure time..."

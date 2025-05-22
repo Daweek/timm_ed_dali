@@ -1,9 +1,9 @@
 #!/bin/bash
 #PBS -q rt_HF
 #PBS -l select=1:ncpus=192:ngpus=8:mpiprocs=192
-#PBS -N ft_cifar100
-#PBS -l walltime=02:00:00
-#PBS -P gcc50533
+#PBS -N render-rtfbd
+#PBS -l walltime=03:00:00
+#PBS -P gah51624
 #PBS -j oe
 #PBS -V
 #PBS -koed
@@ -13,12 +13,14 @@
 echo "ABCI 3.0 ..................................................................................."
 JOB_ID=$(echo "${PBS_JOBID}" | cut -d '.' -f 1)
 echo "JOB ID: ---- >>>>>>  $JOB_ID"
+echo "HOSTNAME: ---- >>>>>>  $HOSTNAME"
+
 
 # ========= Get local Directory ======================================================
 cd $PBS_O_WORKDIR
 pwd -LP
 # ======== Modules and Python on main .configure.sh ==================================
-source ./../config.sh
+source ./../../config.sh
 ######################################################################################
 # ========== For MPI
 #### From others
@@ -65,8 +67,11 @@ do
     start_time=$(date +%s%3N)
 
     # Render to somewhere
-    # mpirun --bind-to socket -machinefile $SGE_JOB_HOSTLIST --use-hwthread-cpus -np 80 python mpi_gpu.py --ngpus-pernode 4 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x 
-    mpirun -np ${NUM_GPUS} -hostfile $PBS_NODEFILE --bind-to socket --oversubscribe -map-by ppr:8:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python mpi_gpu.py --ngpus-pernode 8 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
+    # mpirun --use-hwthread-cpus --oversubscribe -np 192 bash -c "python mpi_cpu.py --image_res $imsize --save_root ${root}/fdb1k_${imsize}x"
+
+    # mpirun -np 48 -hostfile $PBS_NODEFILE --bind-to socket --oversubscribe -map-by ppr:192:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python mpi_cpu.py --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
+
+    mpirun -np 32 -hostfile $PBS_NODEFILE --use-hwthread-cpus --bind-to socket --oversubscribe -map-by ppr:192:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python mpi_gpu.py --ngpus-pernode 8 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
     
     #--instance 10 --rotation 1 --nweights 1
 
