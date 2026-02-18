@@ -6,13 +6,14 @@ import torch.utils.data as torch_data
 from torch.utils.data import Dataset, DataLoader
 import torch.utils.data.distributed as torch_data_distributed
 from torchvision import datasets,transforms
+from torchvision.transforms import v2
 # from torch.nn.parallel import DistributedDataParallel as DDP
 import time
 import os
 from datetime import timedelta
 import math
 
-# from Fractal2D_cpu import Fractal2D_cpu, worker_init_fdb_fn
+from Fractal2D import Fractal2D_cpu, worker_init_fdb_fn
 # from customdataloader_egl import MyLoader_egl, worker_init_egl_fn
 
 from nvidia.dali.plugin.pytorch import DALIClassificationIterator, LastBatchPolicy
@@ -28,14 +29,14 @@ from termcolor import colored
 import webdataset as wds
 
 from typing import List
-from ffcv.fields import IntField, RGBImageField
-from ffcv.fields.decoders import IntDecoder, SimpleRGBImageDecoder, RandomResizedCropRGBImageDecoder
-from ffcv.loader import Loader, OrderOption
-from ffcv.pipeline.operation import Operation
-from ffcv.transforms import RandomHorizontalFlip, Cutout, \
-    RandomTranslate, Convert, ToDevice, ToTensor, ToTorchImage
-from ffcv.transforms.common import Squeeze
-from ffcv.writer import DatasetWriter
+# from ffcv.fields import IntField, RGBImageField
+# from ffcv.fields.decoders import IntDecoder, SimpleRGBImageDecoder, RandomResizedCropRGBImageDecoder
+# from ffcv.loader import Loader, OrderOption
+# from ffcv.pipeline.operation import Operation
+# from ffcv.transforms import RandomHorizontalFlip, Cutout, \
+#     RandomTranslate, Convert, ToDevice, ToTensor, ToTorchImage
+# from ffcv.transforms.common import Squeeze
+# from ffcv.writer import DatasetWriter
 
 # Custom for local batch experiments
 import sys
@@ -62,7 +63,6 @@ parser.add_argument('-b', '--batch-size', type=int, default=128, metavar='N',
                     help='input batch size for training (default: 32)')
 parser.add_argument('--root', default=None, 
                     help='path/URL for CSV path://')
-parser.add_argument('--render-type', default="none", type = str, help='{cpu or gpu}')
 
 # WEBDATASETS
 parser.add_argument('-w','--wds', action='store_true', default=False,
@@ -82,9 +82,11 @@ parser.add_argument('-f','--ffcv', action='store_true', default=False,
 
 
 # CPU render
+# For render to RAM
+parser.add_argument('--render-type', default="none", type = str, help='{cpu or gpu}')
 parser.add_argument('--render-fdb', action='store_true', default=False,
                     help='Using CPU based real-time render to create FDB dataset.')
-parser.add_argument('--render-oneinstance', action='store_true', default=True,
+parser.add_argument('--render-oneinstance', action='store_true', default=False,
                     help='Using CPU based real-time render to create FDB dataset.')                    
 parser.add_argument('--render-mvfdb', action='store_true', default=False,
                     help='Using CPU/GPU based real-time render to create MVF dataset.')
@@ -96,6 +98,11 @@ parser.add_argument('--render-countpatch', type=int, default=1, metavar='N',
                     help='Image patch size (default: None => model default)')
 parser.add_argument('--render-patchmode', type=int, default=0, metavar='N',
                     help='Image patch size (default: None => model default)')
+parser.add_argument('--instance', default=10, type = int, help='#instance, 10 => 1000 instance, 100 => 10,000 instance per category')
+parser.add_argument('--rotation', default=4, type = int, help='Flip per category')
+parser.add_argument('--nweights', default=25, type = int, help='Transformation of each weights. Original DB is 25 from csv files')
+parser.add_argument('--ram-batch', action='store_true', default=False,
+                    help='Experiment to read from RAM...')
 
 
 
@@ -210,7 +217,7 @@ def train(train_loader,model,criterion,optimizer,epoch,device,world_size,args,te
     tfinal = time.perf_counter()
     # print0("Total time per Epoch [{}]: {} seconds".format(epoch,tfinal - t0))
     total_time = tfinal - t0
-    print0("\tTotal time per epoch [{}]: {:0.4f} s, {:0>8} ".format(epoch,total_time,str(timedelta(seconds=total_time))))
+    print0(colored("\tTotal time per epoch [{}]: {:0.4f}s, {:0>8} ".format(epoch,total_time,str(timedelta(seconds=total_time))),'red'))
 
 def main():
     args = parser.parse_args()
@@ -245,58 +252,72 @@ def main():
     print("WorldSize {}  rank {} -> Ready".format(world_size, rank))
     dist.barrier()
       
-    train_transform = transforms.Compose([transforms.Resize(364),
-                                          transforms.RandomCrop(224),
-                                          transforms.RandomHorizontalFlip(0.5),
-                                          transforms.ToTensor(),
-                                          transforms.Normalize(mean=[0.485 * 255,0.456 * 255,0.406 * 255],
-                                                               std=[0.229 * 255,0.224 * 255,0.225 * 255]) ,])
+    # train_transform = transforms.Compose([transforms.Resize(364),
+    #                                       transforms.RandomCrop(224),
+    #                                       transforms.RandomHorizontalFlip(0.5),
+    #                                       transforms.ToTensor(),
+    #                                       transforms.Normalize(mean=[0.485 * 255,0.456 * 255,0.406 * 255],
+    #                                                            std=[0.229 * 255,0.224 * 255,0.225 * 255]) ,])
+    
+    train_transform = transforms.Compose([transforms.ToTensor()])
+    
+    
+    # train_transform_ram = None
+    
+    # train_transform_ram = transforms.Compose([ transforms.Normalize(mean=[0.485 * 255,0.456 * 255,0.406 * 255],
+                                                            #    std=[0.229 * 255,0.224 * 255,0.225 * 255]) ,])
     
     if args.render_type != "none" and args.dali is False:
         
-        # if args.render_type == "cpu":
-        #     print0("===> CPU -- FDB_render ....")
-        #     print0("Loading from:{}".format(args.csv))
-        #     print0("Render-size:{}".format(args.render_size))
-        #     train_dataset = Fractal2D_cpu(root=args.csv, transform = train_transform, width = args.render_size, height = args.render_size, npts = 200000, patch_mode = args.render_patchmode, patch_num = 10, patchgen_seed = 100, pointgen_seed = 100,oneinstance = args.render_oneinstance, countpatch =  args.render_countpatch)
-            
-        #     train_sampler = torch.utils.data.distributed.DistributedSampler(
-        #         train_dataset,
-        #         num_replicas=dist.get_world_size(),
-        #         rank=dist.get_rank())
-            
-        #     if (args.workers == -1):
-        #         train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-        #                                             batch_size=args.batch_size,sampler=train_sampler)
-        #     else:
-        #         train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-        #                                             batch_size=args.batch_size,
-        #                                             sampler=train_sampler,
-        #                                             num_workers=args.workers,
-        #                                             worker_init_fn=worker_init_fdb_fn,
-        #                                             persistent_workers=True)
-        if args.render_type == "gpu":
-            print0("===> GPU  FDB_render  ....")
-            print0("Loading from:{}".format(args.root))
+        if args.render_type == "cpu":
+            print0("===> CPU -- FDB_render ....")
+            print0("Loading from:{}".format(args.csv))
             print0("Render-size:{}".format(args.render_size))
-            train_dataset = MyLoader_egl(root=args.root, transform = train_transform, oneinstance=True)
+            csv_names = os.listdir(args.csv)
+            csv_names.sort()            
+            nlist = len(csv_names)
+            print0(f"\n\nNumber of Classes found in csv files {nlist}")
+            
+            train_dataset = Fractal2D_cpu(root=args.csv, width = args.render_size, height = args.render_size, npts = 200000, patch_mode = args.render_patchmode, patch_num = args.instance, patchgen_seed = 100, pointgen_seed = 100,oneinstance = args.render_oneinstance, countpatch =  args.render_countpatch, ram = args.ram_batch,batch=args.batch_size)
             
             train_sampler = torch.utils.data.distributed.DistributedSampler(
                 train_dataset,
-                num_replicas=world_size,
-                rank=rank)
+                num_replicas=dist.get_world_size(),
+                rank=dist.get_rank())
             
             if (args.workers == -1):
                 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                                    batch_size=args.batch_size,
-                                                    sampler=train_sampler)
+                                                    batch_size=args.batch_size,sampler=train_sampler)
             else:
                 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                                     batch_size=args.batch_size,
                                                     sampler=train_sampler,
                                                     num_workers=args.workers,
-                                                    worker_init_fn=worker_init_egl_fn,
+                                                    worker_init_fn=worker_init_fdb_fn,
+                                                    prefetch_factor=4,
                                                     persistent_workers=True)
+        # elif args.render_type == "gpu":
+        #     print0("===> GPU  FDB_render  ....")
+        #     print0("Loading from:{}".format(args.root))
+        #     print0("Render-size:{}".format(args.render_size))
+        #     train_dataset = MyLoader_egl(root=args.root, transform = train_transform, oneinstance=True)
+            
+        #     train_sampler = torch.utils.data.distributed.DistributedSampler(
+        #         train_dataset,
+        #         num_replicas=world_size,
+        #         rank=rank)
+            
+        #     if (args.workers == -1):
+        #         train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
+        #                                             batch_size=args.batch_size,
+        #                                             sampler=train_sampler)
+        #     else:
+        #         train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
+        #                                             batch_size=args.batch_size,
+        #                                             sampler=train_sampler,
+        #                                             num_workers=args.workers,
+        #                                             worker_init_fn=worker_init_egl_fn,
+        #                                             persistent_workers=True)
         else:
             print0("Not a valid option exit ....")
             exit(0)
@@ -450,7 +471,7 @@ def main():
                                                 sampler=train_sampler,
                                                 num_workers=args.workers,
                                                 persistent_workers=True,
-                                                drop_last=True,
+                                                drop_last=False,
                                                 prefetch_factor=4,
                                     )
  
@@ -461,6 +482,8 @@ def main():
         print0("\tTime to load categories:{} seconds\n".format(t1-t0))
 
 
+    # Print transformations
+    print0(colored ("Train transformations:\n\t {}".format(train_loader.dataset.transform),'green'))
         
     model = None
     criterion = None
@@ -479,10 +502,11 @@ def main():
         # validate(val_loader,model,criterion,device)
     
     comm.barrier()
+    
     print0("\n\tTotal time for all epochs:: {:0.6f} seconds,{:0>8} ".format(time.perf_counter()-t0,str(timedelta(seconds=time.perf_counter()-t0))))
     print0("Finished...")
 
-    # dist.destroy_process_group()
+    dist.destroy_process_group()
 
 if __name__ == '__main__':
     main()

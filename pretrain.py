@@ -43,7 +43,7 @@ mpirank = comm.Get_rank()
 mpisize = comm.Get_size()
 # from oneInstance import OneInstance_Imnet
 
-# from benchmarks.Fractal2D import Fractal2D_cpu, worker_init_fdb_fn
+from benchmarks.Fractal2D import Fractal2D_cpu, worker_init_fdb_fn
 
 def seed_worker(rank):
     worker_seed = torch.initial_seed() + rank
@@ -851,6 +851,7 @@ def main():
     print0("\n")    
     fina_experiment_time = time.perf_counter() - initial_experiment_time
     time.sleep(0.5) # -> Wait for the console to flush
+    torch.distributed.destroy_process_group()
         
     print0(colored("  Total experiment time: {} seconds, {:0>4} ".format(fina_experiment_time,str(timedelta(seconds=fina_experiment_time))),'white'))
 

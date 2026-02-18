@@ -96,6 +96,8 @@ def _load_original_pretrained(model, state_dict, strict=True, default_cfg=None):
             classifiers = (classifiers,)
         for classifier_name in classifiers:
             # completely discard fully connected
+            # print(classifier_name + '.weight')
+            # print('\n\n\n')
             del state_dict[classifier_name + '.weight']
             del state_dict[classifier_name + '.bias']
         

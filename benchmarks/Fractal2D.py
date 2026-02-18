@@ -1,7 +1,7 @@
 import sys
 import os
 
-sys.path.insert(1,"/home/acc12930pb/working/transformer/timm_ed_dali/render_engines/fdb/ed_fractal2d_cpu/build/lib.linux-x86_64-cpython-312")
+sys.path.insert(1,"/home/acc12930pb/working/transformer/timm_ed_dali/render_engines/fdb/ed_fractal2d_cpu/build/lib.linux-x86_64-cpython-313")
 import PyFractal2DRenderer as fr
 
 from tqdm import tqdm
@@ -198,12 +198,16 @@ class Fractal2D_cpu(datasets.DatasetFolder):
             # _imgs= fr.render(pts, self.width, self.height, self.patch_mode, flip_flg, self.patchgen_rng.integers(np.iinfo(np.uint32).max))
         
         
+            # out_data = _imgs[0]
             out_data = _imgs[0].permute(2,0,1) #chw
-            out_data = transforms.ToPILImage()(out_data.squeeze_(0))
+            # out_data = transforms.ToPILImage()(out_data.squeeze_(0))
             self.ram_image.append(out_data)
             self.ram_class.append(self.ilist[iid][0])
             
-            w,h = out_data.size
+            ## This is togeter with PIL
+            # w,h = out_data.size
+            
+            w,h = self.width, self.height
             total_bytes += w * h * 3
             # print0("Total bytes so far... {:,}".format(total_bytes))
 
@@ -226,7 +230,7 @@ class Fractal2D_cpu(datasets.DatasetFolder):
         """
         self.clist = []
         ocdns = os.listdir(param_dir)
-        print0(ocdns)
+        # print0(ocdns)
         i=0
         cns = os.listdir(param_dir)
         cns.sort()

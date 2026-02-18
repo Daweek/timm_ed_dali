@@ -136,8 +136,10 @@ def main():
         print('error on weights [1-25]')
         exit(0)
     
-    args.save_root = args.save_root + '_' + args.backend
-
+    # Uncoment if you need which EGL or GLFW folder.
+    # args.save_root = args.save_root + '_' + args.backend
+    args.save_root = args.save_root
+    
     # MPI related configurations
     nlist = len(csv_names)
     print0(f"Number of Classes found in csv files {nlist}")

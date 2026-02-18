@@ -11,16 +11,22 @@
 
 # cat $JOB_SCRIPT
 echo "ABCI 3.0 ..................................................................................."
-JOB_ID=$(echo "${PBS_JOBID}" | cut -d '.' -f 1)
+JOB_ID=$(echo "${PBS_JOBID:-$$}" | cut -d '.' -f 1)
 echo "JOB ID: ---- >>>>>>  $JOB_ID"
 echo "HOSTNAME: ---- >>>>>>  $HOSTNAME"
 
-
 # ========= Get local Directory ======================================================
-cd $PBS_O_WORKDIR
-pwd -LP
+if [ -z "$PBS_O_WORKDIR" ]; then
+    echo "PBS_O_WORKDIR is not set. Using current directory."
+    PBS_O_WORKDIR=$(pwd)
+else
+    echo "PBS_O_WORKDIR is set to: $PBS_O_WORKDIR"
+fi
+
 # ======== Modules and Python on main .configure.sh ==================================
+
 source ./../../config.sh
+
 ######################################################################################
 # ========== For MPI
 #### From others
@@ -40,15 +46,16 @@ export MASTER_PORT=$((10000 + ($JOB_ID % 50000)))
 # ========= For experiment and pre-train
 #######################################################
 global_start=$(date +%s%3N)
+
 # Experiments parameters
-size=(32 64 128 256 512 1024)
-# size=(32)
+# size=(32 64 128 256 512 1024)
+size=(32)
 
 # NFS network_________________
-#root=nfs/raw
+# root=nfs/raw
 
 # SSD ___________________________
-export SSD=${PBS_LOCALDIR}
+export SSD=${PBS_LOCALDIR:-ssd}
 root=${SSD}/raw
 # Check if the directory exists
 if [ -d "$root" ]; then
@@ -71,7 +78,11 @@ do
 
     # mpirun -np 48 -hostfile $PBS_NODEFILE --bind-to socket --oversubscribe -map-by ppr:192:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python mpi_cpu.py --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
 
-    mpirun -np 32 -hostfile $PBS_NODEFILE --use-hwthread-cpus --bind-to socket --oversubscribe -map-by ppr:192:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python mpi_gpu.py --ngpus-pernode 8 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
+    # Normal ABCI 3.0 job submit...
+    mpirun -np 192 -hostfile $PBS_NODEFILE --use-hwthread-cpus --bind-to socket --oversubscribe -map-by ppr:192:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python mpi_gpu.py --ngpus-pernode 8 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
+
+    # Tanimura san nodes...
+    # mpirun -np 1  -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python mpi_gpu.py --ngpus-pernode 1 --image_res $imsize --save_root ${root}/fdb1k_${imsize}x
     
     #--instance 10 --rotation 1 --nweights 1
 

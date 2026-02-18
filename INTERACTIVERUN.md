@@ -8,7 +8,20 @@ mpirun --bind-to socket -np 1 python pretrain.py ssd/FractalDB-1000-EGL-GLFW --m
 # Command to run Pytorch ALL
 mpirun -np 8 -hostfile $PBS_NODEFILE --bind-to socket --oversubscribe -map-by ppr:8:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python pretrain.py ${PBS_LOCALDIR}/fdb1k_512x --dali --model deit_tiny_patch16_224 --experiment test_interactive  --input-size 3 224 224  --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5 --std 0.5 0.5 0.5 --color-jitter 0.4 --hflip 0.5 --vflip 0.5 --scale 0.08 1.0 --ratio 0.75 1.3333 --opt adamw --lr 1.0e-3 --weight-decay 0.05 --deit-scale 512.0 --sched cosine_iter --min-lr 1.0e-5 --warmup-lr 1e-06 --warmup-epochs 5 --warmup-iter 5000 --cooldown-epochs 0  --aa rand-m9-mstd0.5-inc1  --interpolation bicubic --num-classes 1000 --eval-metric loss --log-interval 50  --mixup 0.8 --cutmix 1.0 --drop-path 0.1  --reprob 0.5 --remode pixel --no-prefetcher --amp --pin-mem --batch-size 32 -j 23 --epochs 300
 
-################### FINE TUNE ######################
+# Command to run Pytorch ALL -> NEW VADER
+mpirun -np 8 --use-hwthread-cpus --bind-to socket --oversubscribe -mca pml ob1 -mca btl self,vader -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python pretrain.py /local/acc12930pb/fdb --model deit_tiny_patch16_224 --experiment test_interactive  --input-size 3 224 224  --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5 --std 0.5 0.5 0.5 --color-jitter 0.4 --hflip 0.5 --vflip 0.5 --scale 0.08 1.0 --ratio 0.75 1.3333 --opt adamw --lr 1.0e-3 --weight-decay 0.05 --deit-scale 512.0 --sched cosine_iter --min-lr 1.0e-5 --warmup-lr 1e-06 --warmup-epochs 5 --warmup-iter 5000 --cooldown-epochs 0  --aa rand-m9-mstd0.5-inc1  --interpolation bicubic --num-classes 1000 --eval-metric loss --log-interval 50  --mixup 0.8 --cutmix 1.0 --drop-path 0.1  --reprob 0.5 --remode pixel --no-prefetcher --amp --pin-mem --batch-size 32 -j 23 --epochs 3
+
+
+# Command to run Pytorch ALL -> NODO
+mpirun -np 4 --use-hwthread-cpus --bind-to socket --oversubscribe -mca pml ob1 -mca btl self,vader -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python pretrain.py /local/acc12930pb/FractalDB1k_1k_CPUNak --model deit_tiny_patch16_224 --experiment test_interactive  --input-size 3 224 224  --mean 0.5 0.5 0.5 --std 0.5 0.5 0.5 --std 0.5 0.5 0.5 --color-jitter 0.4 --hflip 0.5 --vflip 0.5 --scale 0.08 1.0 --ratio 0.75 1.3333 --opt adamw --lr 1.0e-3 --weight-decay 0.05 --deit-scale 512.0 --sched cosine_iter --min-lr 1.0e-5 --warmup-lr 1e-06 --warmup-epochs 5 --warmup-iter 5000 --cooldown-epochs 0  --aa rand-m9-mstd0.5-inc1  --interpolation bicubic --num-classes 1000 --eval-metric loss --log-interval 50  --mixup 0.8 --cutmix 1.0 --drop-path 0.1  --reprob 0.5 --remode pixel --no-prefetcher --amp --pin-mem --batch-size 512 -j 12 --epochs 3
+
+################### FINE TUNE ##############################################################################################################
+# Command to fine-tune CIFAR10 PyTorch ALL ->> NODO
+mpirun -np 8 --use-hwthread-cpus --bind-to socket --oversubscribe -mca pml ob1 -mca btl self,vader -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python finetune.py /local/acc12930pb/dataset/cifar10  --model deit_tiny_patch16_224 --experiment test_interactive --input-size 3 224 224 --num-classes 10 --batch-size 96 --opt sgd --lr 0.01 --weight-decay 0.0001 --deit-scale 512.0  --sched cosine --lr-cycle-mul 1.0 --min-lr 1e-05 --decay-rate 0.1 --warmup-lr 1e-06 --warmup-epochs 10  --lr-cycle-limit 1 --cooldown-epochs 0 --scale 0.08 1.0 --ratio 0.75 1.3333 --hflip 0.5 --color-jitter 0.4 --interpolation bicubic --train-interpolation bicubic --mean 0.485 0.456 0.406  --std 0.229 0.224 0.225 --reprob 0.25 --recount 1 --remode pixel --aa rand-m9-mstd0.5-inc1  --mixup 0.8 --cutmix 1.0 --mixup-prob 1.0 --mixup-switch-prob 0.5 --mixup-mode batch --smoothing 0.1 --drop-path 0.1 -j 12 --no-prefetcher --amp --pin-mem --epochs 3 --crop-pct 1.00 --output /local/acc12930pb/finetune_checkpoint --pretrained-path /local/acc12930pb/pretrain_checkpoint/FracDB1kNak/test_interactive/last.pth.tar
+
+
+# Command to fine-tune CIFAR10 PyTorch ALL
+python finetune.py /groups/gcc50533/edgar/datasets/cifar10  --model deit_tiny_patch16_224 --experiment test_interactive --input-size 3 224 224 --num-classes 10 --batch-size 96 --opt sgd --lr 0.01 --weight-decay 0.0001 --deit-scale 512.0  --sched cosine --lr-cycle-mul 1.0 --min-lr 1e-05 --decay-rate 0.1 --warmup-lr 1e-06 --warmup-epochs 10  --lr-cycle-limit 1 --cooldown-epochs 0 --scale 0.08 1.0 --ratio 0.75 1.3333 --hflip 0.5 --color-jitter 0.4 --interpolation bicubic --train-interpolation bicubic --mean 0.485 0.456 0.406  --std 0.229 0.224 0.225 --reprob 0.25 --recount 1 --remode pixel --aa rand-m9-mstd0.5-inc1  --mixup 0.8 --cutmix 1.0 --mixup-prob 1.0 --mixup-switch-prob 0.5 --mixup-mode batch --smoothing 0.1 --drop-path 0.1 -j 19 --no-prefetcher --amp --pin-mem --epochs 1 --crop-pct 1.00 --pretrained-path /home/acc12930pb/working/transformer/nakamura/1p-frac/train/output/pretrain/vit_tiny_patch16_224_sigma3.5_delta0.1_sample1000_80000ep.pth
 
 # Command to fine-tune CIFAR100 PyTorch ALL
 mpirun -np 8 -hostfile $PBS_NODEFILE --bind-to socket --oversubscribe -map-by ppr:8:node -mca pml ob1 -mca btl self,tcp -mca btl_tcp_if_include bond0 -x MASTER_ADDR=${MASTER_ADDR} -x MASTER_PORT=${MASTER_PORT} python finetune.py ${PBS_LOCALDIR}/cifar100  --model deit_tiny_patch16_224 --experiment test_interactive --input-size 3 224 224 --num-classes 100 --batch-size 96 --opt sgd --lr 0.01 --weight-decay 0.0001 --deit-scale 512.0  --sched cosine --lr-cycle-mul 1.0 --min-lr 1e-05 --decay-rate 0.1 --warmup-lr 1e-06 --warmup-epochs 10  --lr-cycle-limit 1 --cooldown-epochs 0 --scale 0.08 1.0 --ratio 0.75 1.3333 --hflip 0.5 --color-jitter 0.4 --interpolation bicubic --train-interpolation bicubic --mean 0.485 0.456 0.406  --std 0.229 0.224 0.225 --reprob 0.25 --recount 1 --remode pixel --aa rand-m9-mstd0.5-inc1  --mixup 0.8 --cutmix 1.0 --mixup-prob 1.0 --mixup-switch-prob 0.5 --mixup-mode batch --smoothing 0.1 --drop-path 0.1 -j 19 --no-prefetcher --amp --pin-mem --epochs 1 --crop-pct 1.0
@@ -39,5 +52,11 @@ echo "JOB ID: ---- >>>>>>  $JOB_ID"
 
 export MASTER_ADDR=$(/usr/sbin/ip a show dev bond0 | grep inet | cut -d " " -f 6 | cut -d "/" -f 1|head -n 1)
 export MASTER_PORT=$((10000 + ($JOB_ID % 50000)))
+    echo "MASTER_ADDR: ${MASTER_ADDR}"
+    echo "MASTER_PORT: ${MASTER_PORT}"
+
+########## For NODO H761
+export MASTER_ADDR=$(/usr/sbin/ip a show dev bond0 | grep inet | cut -d " " -f 6 | cut -d "/" -f 1|head -n 1)
+export MASTER_PORT=$((10000 + (496853 % 50000)))
     echo "MASTER_ADDR: ${MASTER_ADDR}"
     echo "MASTER_PORT: ${MASTER_PORT}"
